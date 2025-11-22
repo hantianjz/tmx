@@ -48,21 +48,8 @@ sudo cp target/release/tmx /usr/local/bin/
 # Generate and install completions
 tmx completions fish > ~/.config/fish/completions/tmx.fish
 
-# Generate t alias completions
-tmx completions fish | sed 's/tmx/t/g; s/__tmx/__t/g' > ~/.config/fish/completions/t.fish
-
-# Generate t alias function
-tmx alias fish > ~/.config/fish/functions/t.fish
-
 # Reload fish
 source ~/.config/fish/config.fish
-```
-
-Or use the automated setup:
-
-```bash
-tmx setup fish
-# Follow the instructions
 ```
 
 ## Quick Start
@@ -79,8 +66,6 @@ tmx init
 
 ```bash
 tmx start dev
-# or use the short alias
-t start dev
 ```
 
 ## Usage
@@ -92,25 +77,25 @@ tmx                    # List configured and running sessions (default)
 tmx start <session>    # Create and/or attach to a session
 tmx stop <session>     # Stop (kill) a session
 tmx list               # List configured and running sessions
-tmx running            # Show only running tmux sessions
 tmx init               # Create default configuration file
 tmx validate           # Validate configuration syntax
 tmx completions fish   # Generate Fish shell completions
-tmx alias fish         # Generate Fish shell alias
-tmx setup fish         # Show setup instructions
 ```
 
-**Short alias:** Use `t` as a shorthand for `tmx`:
+### Global Options
 
 ```bash
-t start dev
-t stop dev
-t list
+tmx -c <path>          # Use custom config file
+tmx --config <path>    # Long form
+
+# Examples:
+tmx -c ~/my-configs/work.toml list
+tmx --config ./project.toml start dev
 ```
 
 ### Configuration
 
-Configuration file location: `~/.config/tmx/sessions.toml`
+Configuration file location: `~/.config/tmx/tmx.toml`
 
 #### Basic Example
 
@@ -128,28 +113,64 @@ windows = [
 ]
 ```
 
-#### Advanced Example
+#### Advanced Example (with layouts and custom sizes)
 
 ```toml
 [sessions.fullstack]
 name = "fullstack"
 root = "~/projects/webapp"
-windows = [
-    { name = "editor", panes = [
-        { command = "nvim ." }
-    ]},
-    { name = "servers", panes = [
-        { command = "cd backend && npm run dev", env = { NODE_ENV = "development", PORT = "3000" } },
-        { command = "cd frontend && npm start", env = { PORT = "3001" } }
-    ]},
-    { name = "database", panes = [
-        { command = "docker-compose up postgres" }
-    ]},
-    { name = "logs", panes = [
-        { command = "tail -f backend/logs/app.log" },
-        { command = "tail -f frontend/logs/access.log" }
-    ]}
-]
+startup_window = "editor"       # Focus editor window on startup
+startup_pane = 0                # Focus first pane in that window
+
+# Editor window with main-vertical layout
+[[sessions.fullstack.windows]]
+name = "editor"
+layout = "main-vertical"        # Large left pane, smaller right panes
+
+[[sessions.fullstack.windows.panes]]
+command = "nvim ."              # Main pane (takes majority of space)
+
+[[sessions.fullstack.windows.panes]]
+command = "git status"
+size = "30%"                    # Takes 30% of width
+
+# Servers window with custom per-pane directories
+[[sessions.fullstack.windows]]
+name = "servers"
+layout = "even-horizontal"
+
+[[sessions.fullstack.windows.panes]]
+command = "npm run dev"
+root = "~/projects/webapp/backend"
+env = { NODE_ENV = "development", PORT = "3000" }
+
+[[sessions.fullstack.windows.panes]]
+command = "npm start"
+root = "~/projects/webapp/frontend"
+env = { PORT = "3001" }
+
+# Database window
+[[sessions.fullstack.windows]]
+name = "database"
+
+[[sessions.fullstack.windows.panes]]
+command = "docker-compose up postgres"
+
+# Logs window with tiled layout
+[[sessions.fullstack.windows]]
+name = "logs"
+layout = "tiled"                # Grid layout for multiple log panes
+
+[[sessions.fullstack.windows.panes]]
+command = "tail -f backend/logs/app.log"
+
+[[sessions.fullstack.windows.panes]]
+command = "tail -f frontend/logs/access.log"
+
+[[sessions.fullstack.windows.panes]]
+command = "docker logs -f postgres"
+split = "vertical"              # Explicitly vertical split
+size = "40"                     # 40 lines tall
 ```
 
 ### Configuration Schema
@@ -161,6 +182,8 @@ windows = [
 | `name` | string | Yes | Session name (used with tmux) |
 | `root` | string | No | Starting directory for all windows (default: `~`) |
 | `windows` | array | Yes | List of window configurations |
+| `startup_window` | string/number | No | Window to focus on startup (name or 0-based index, default: 0) |
+| `startup_pane` | number | No | Pane to focus on startup (0-based index, default: 0) |
 
 #### Window
 
@@ -168,6 +191,8 @@ windows = [
 |-------|------|----------|-------------|
 | `name` | string | Yes | Window name |
 | `panes` | array | Yes | List of pane configurations |
+| `layout` | string | No | Tmux layout: `main-vertical`, `main-horizontal`, `even-horizontal`, `even-vertical`, `tiled` |
+| `root` | string | No | Override session working directory |
 
 #### Pane
 
@@ -175,6 +200,9 @@ windows = [
 |-------|------|----------|-------------|
 | `command` | string | No | Command to execute in the pane |
 | `env` | object | No | Environment variables for the pane |
+| `root` | string | No | Override window/session working directory |
+| `split` | string | No | Split direction: `horizontal` or `vertical` (default: alternating) |
+| `size` | string | No | Pane size: percentage (`30%`) or lines/columns (`20`) |
 
 ## Examples
 
@@ -194,7 +222,8 @@ If you were using the previous Fish shell implementation:
 
 1. **Copy your config:**
    ```bash
-   cp ~/.config/fishmux/sessions.toml ~/.config/tmx/sessions.toml
+   mkdir -p ~/.config/tmx
+   cp ~/.config/fishmux/sessions.toml ~/.config/tmx/tmx.toml
    ```
 
 2. **Remove old Fish functions:**

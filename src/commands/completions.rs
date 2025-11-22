@@ -25,21 +25,3 @@ pub fn run_completions(shell: Shell) -> Result<()> {
     }
     Ok(())
 }
-
-pub fn run_alias(shell: Shell) -> Result<()> {
-    match shell {
-        Shell::Fish => {
-            println!("{}", shells::fish::generate_alias());
-        }
-    }
-    Ok(())
-}
-
-pub fn run_setup(shell: Shell) -> Result<()> {
-    match shell {
-        Shell::Fish => {
-            println!("{}", shells::fish::generate_setup_instructions());
-        }
-    }
-    Ok(())
-}

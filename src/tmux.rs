@@ -1,7 +1,25 @@
 use anyhow::{Context, Result};
 use std::process::{Command, Output};
 
-/// Check if tmux is installed
+/// Format a tmux window target (session:window_index)
+fn window_target(session: &str, window_index: usize) -> String {
+    format!("{}:{}", session, window_index)
+}
+
+/// Format a tmux pane target (session:window_index.pane_index)
+fn pane_target(session: &str, window_index: usize, pane_index: usize) -> String {
+    format!("{}:{}.{}", session, window_index, pane_index)
+}
+
+/// Check if debug mode is enabled
+fn is_debug_mode() -> bool {
+    std::env::var("TMX_DEBUG").is_ok()
+}
+
+/// Check if tmux is currently installed and available in PATH.
+///
+/// # Returns
+/// `true` if tmux is installed, `false` otherwise.
 pub fn is_installed() -> bool {
     Command::new("tmux")
         .arg("-V")
@@ -10,12 +28,20 @@ pub fn is_installed() -> bool {
         .unwrap_or(false)
 }
 
-/// Check if we're currently inside a tmux session
+/// Check if we're currently running inside a tmux session.
+///
+/// # Returns
+/// `true` if inside a tmux session (TMUX env var is set), `false` otherwise.
 pub fn is_inside_tmux() -> bool {
     std::env::var("TMUX").is_ok()
 }
 
-/// Get the base-index setting (default 0)
+/// Get the tmux base-index setting from global options.
+///
+/// The base-index determines the starting index for windows (typically 0 or 1).
+///
+/// # Returns
+/// The base-index value, or 0 if not set or if an error occurs.
 pub fn get_base_index() -> Result<usize> {
     let output = Command::new("tmux")
         .args(["show-options", "-g", "base-index"])
@@ -37,7 +63,13 @@ pub fn get_base_index() -> Result<usize> {
     Ok(index)
 }
 
-/// Check if a session exists
+/// Check if a tmux session with the given name exists.
+///
+/// # Arguments
+/// * `name` - The session name to check
+///
+/// # Returns
+/// `Ok(true)` if the session exists, `Ok(false)` if it doesn't, or an error.
 pub fn has_session(name: &str) -> Result<bool> {
     let output = Command::new("tmux")
         .args(["has-session", "-t", name])
@@ -47,7 +79,10 @@ pub fn has_session(name: &str) -> Result<bool> {
     Ok(output.status.success())
 }
 
-/// List all running tmux sessions
+/// List all currently running tmux sessions.
+///
+/// # Returns
+/// A vector of session names, or an empty vector if no sessions are running.
 pub fn list_sessions() -> Result<Vec<String>> {
     let output = Command::new("tmux")
         .args(["list-sessions", "-F", "#{session_name}"])
@@ -92,20 +127,40 @@ pub fn new_window(session: &str, window_name: &str, root: Option<&str>) -> Resul
     Ok(())
 }
 
-/// Split a window to create a new pane
-pub fn split_window(
+/// Split a window with specific size
+pub fn split_window_with_size(
     session: &str,
     window_index: usize,
     horizontal: bool,
+    size: Option<&str>,
     root: Option<&str>,
 ) -> Result<()> {
-    let target = format!("{}:{}", session, window_index);
+    let target = window_target(session, window_index);
     let split_flag = if horizontal { "-h" } else { "-v" };
     let mut args = vec!["split-window", "-t", &target, split_flag];
+
+    // Add size parameter if specified
+    if let Some(size_spec) = size {
+        if size_spec.ends_with('%') {
+            // Percentage size: use -p flag
+            let percentage = size_spec.trim_end_matches('%');
+            args.push("-p");
+            args.push(percentage);
+        } else {
+            // Absolute size: use -l flag
+            args.push("-l");
+            args.push(size_spec);
+        }
+    }
 
     if let Some(dir) = root {
         args.push("-c");
         args.push(dir);
+    }
+
+    // Debug: print command being executed
+    if is_debug_mode() {
+        eprintln!("DEBUG: tmux {}", args.join(" "));
     }
 
     execute_tmux(&args)?;
@@ -114,28 +169,34 @@ pub fn split_window(
 
 /// Apply a layout to a window
 pub fn select_layout(session: &str, window_index: usize, layout: &str) -> Result<()> {
-    let target = format!("{}:{}", session, window_index);
+    let target = window_target(session, window_index);
+
+    // Debug: print layout command
+    if is_debug_mode() {
+        eprintln!("DEBUG: tmux select-layout -t {} {}", target, layout);
+    }
+
     execute_tmux(&["select-layout", "-t", &target, layout])?;
     Ok(())
 }
 
 /// Send keys (commands) to a specific pane
 pub fn send_keys(session: &str, window_index: usize, pane_index: usize, keys: &str) -> Result<()> {
-    let target = format!("{}:{}.{}", session, window_index, pane_index);
+    let target = pane_target(session, window_index, pane_index);
     execute_tmux(&["send-keys", "-t", &target, keys, "C-m"])?;
     Ok(())
 }
 
 /// Select a window
 pub fn select_window(session: &str, window_index: usize) -> Result<()> {
-    let target = format!("{}:{}", session, window_index);
+    let target = window_target(session, window_index);
     execute_tmux(&["select-window", "-t", &target])?;
     Ok(())
 }
 
 /// Select a pane
 pub fn select_pane(session: &str, window_index: usize, pane_index: usize) -> Result<()> {
-    let target = format!("{}:{}.{}", session, window_index, pane_index);
+    let target = pane_target(session, window_index, pane_index);
     execute_tmux(&["select-pane", "-t", &target])?;
     Ok(())
 }

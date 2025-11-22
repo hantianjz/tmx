@@ -44,22 +44,6 @@ pub fn run() -> Result<()> {
     Ok(())
 }
 
-/// List only running sessions
-pub fn run_running() -> Result<()> {
-    let running_sessions = tmux::list_sessions().unwrap_or_default();
-
-    println!("Running tmux sessions:");
-    if running_sessions.is_empty() {
-        println!("  (none)");
-    } else {
-        for session in running_sessions {
-            println!("  {}", session);
-        }
-    }
-
-    Ok(())
-}
-
 /// List only configured session names (for completions)
 pub fn list_configured() -> Result<()> {
     let config = Config::load()?;

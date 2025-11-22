@@ -4,6 +4,10 @@ use clap::{Parser, Subcommand};
 #[command(name = "tmx")]
 #[command(version, about = "A tmux session manager with declarative TOML configuration", long_about = None)]
 pub struct Cli {
+    /// Path to config file (default: ~/.config/tmx/tmx.toml)
+    #[arg(short, long, global = true)]
+    pub config: Option<String>,
+
     #[command(subcommand)]
     pub command: Option<Commands>,
 }
@@ -26,9 +30,6 @@ pub enum Commands {
     #[command(alias = "ls")]
     List,
 
-    /// Show only running tmux sessions
-    Running,
-
     /// Initialize configuration file
     Init,
 
@@ -37,18 +38,6 @@ pub enum Commands {
 
     /// Generate shell completions
     Completions {
-        /// Shell type (fish, bash, zsh)
-        shell: String,
-    },
-
-    /// Generate shell alias setup
-    Alias {
-        /// Shell type (fish, bash, zsh)
-        shell: String,
-    },
-
-    /// Complete shell integration setup
-    Setup {
         /// Shell type (fish, bash, zsh)
         shell: String,
     },

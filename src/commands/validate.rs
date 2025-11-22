@@ -16,9 +16,11 @@ pub fn run() -> Result<()> {
 
     // Validate each session
     for (id, session) in &config.sessions {
-        session.validate().map_err(|e| {
-            anyhow::anyhow!("Validation failed for session '{}': {}", id, e)
-        })?;
+        if let Err(e) = session.validate() {
+            eprintln!("✗ Validation failed for session '{}':\n", id);
+            eprintln!("{}", e);
+            std::process::exit(1);
+        }
     }
 
     println!("✓ Configuration is valid");

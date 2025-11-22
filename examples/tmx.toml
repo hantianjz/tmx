@@ -1,0 +1,222 @@
+# TMX Configuration Examples
+# Copy this file to ~/.config/tmx/tmx.toml and customize
+
+# Simple development session with layout
+[sessions.dev]
+name = "dev"
+root = "~/projects/myproject"
+startup_window = 0
+
+[[sessions.dev.windows]]
+name = "editor"
+layout = "main-vertical"        # Large main pane, smaller side pane
+
+[[sessions.dev.windows.panes]]
+command = "nvim"
+
+[[sessions.dev.windows.panes]]
+command = "git status"
+size = "25%"                    # Side pane uses 25% width
+
+[[sessions.dev.windows]]
+name = "terminal"
+
+[[sessions.dev.windows.panes]]
+command = ""
+
+# Full-stack web development session
+[sessions.webapp]
+name = "webapp"
+root = "~/projects/webapp"
+startup_window = "editor"       # Focus by name
+
+[[sessions.webapp.windows]]
+name = "editor"
+layout = "main-vertical"
+
+[[sessions.webapp.windows.panes]]
+command = "nvim ."
+
+[[sessions.webapp.windows.panes]]
+command = ""
+
+[[sessions.webapp.windows]]
+name = "backend"
+root = "~/projects/webapp/backend"  # Window-specific root
+
+[[sessions.webapp.windows.panes]]
+command = "npm run dev"
+env = { NODE_ENV = "development", PORT = "3000" }
+
+[[sessions.webapp.windows]]
+name = "frontend"
+root = "~/projects/webapp/frontend"
+
+[[sessions.webapp.windows.panes]]
+command = "npm start"
+env = { PORT = "3001" }
+
+[[sessions.webapp.windows]]
+name = "shell"
+
+[[sessions.webapp.windows.panes]]
+command = ""
+
+# Data science workflow with custom layouts
+[sessions.datascience]
+name = "datascience"
+root = "~/projects/ml"
+startup_window = 0
+startup_pane = 0
+
+[[sessions.datascience.windows]]
+name = "notebook"
+
+[[sessions.datascience.windows.panes]]
+command = "jupyter lab"
+
+[[sessions.datascience.windows]]
+name = "code"
+layout = "main-horizontal"      # Large top pane, smaller bottom
+
+[[sessions.datascience.windows.panes]]
+command = "nvim"
+
+[[sessions.datascience.windows.panes]]
+command = "python"
+size = "30%"
+
+[[sessions.datascience.windows]]
+name = "terminal"
+
+[[sessions.datascience.windows.panes]]
+command = ""
+
+# System monitoring with tiled layout
+[sessions.monitor]
+name = "monitor"
+root = "~"
+
+[[sessions.monitor.windows]]
+name = "system"
+layout = "tiled"                # Grid layout for multiple monitors
+
+[[sessions.monitor.windows.panes]]
+command = "htop"
+
+[[sessions.monitor.windows.panes]]
+command = "watch -n 1 df -h"
+
+[[sessions.monitor.windows.panes]]
+command = "watch -n 1 free -h"
+
+[[sessions.monitor.windows.panes]]
+command = "nethogs"
+
+[[sessions.monitor.windows]]
+name = "logs"
+layout = "even-vertical"        # Stacked vertically
+
+[[sessions.monitor.windows.panes]]
+command = "tail -f /var/log/system.log"
+
+[[sessions.monitor.windows.panes]]
+command = "journalctl -f"
+
+# Microservices with per-pane directories
+[sessions.microservices]
+name = "microservices"
+root = "~/projects/platform"
+startup_window = "services"
+
+[[sessions.microservices.windows]]
+name = "editor"
+
+[[sessions.microservices.windows.panes]]
+command = "nvim"
+
+[[sessions.microservices.windows]]
+name = "services"
+layout = "tiled"
+
+[[sessions.microservices.windows.panes]]
+command = "npm start"
+root = "~/projects/platform/auth-service"
+env = { SERVICE = "auth", PORT = "3001" }
+
+[[sessions.microservices.windows.panes]]
+command = "npm start"
+root = "~/projects/platform/api-gateway"
+env = { SERVICE = "api", PORT = "3000" }
+
+[[sessions.microservices.windows.panes]]
+command = "npm start"
+root = "~/projects/platform/user-service"
+env = { SERVICE = "user", PORT = "3002" }
+
+[[sessions.microservices.windows.panes]]
+command = "npm start"
+root = "~/projects/platform/notification-service"
+env = { SERVICE = "notification", PORT = "3003" }
+
+[[sessions.microservices.windows]]
+name = "logs"
+layout = "main-horizontal"
+
+[[sessions.microservices.windows.panes]]
+command = "tail -f logs/combined.log"
+
+[[sessions.microservices.windows.panes]]
+command = "tail -f logs/error.log"
+size = "30%"
+
+# Docker development with explicit splits
+[sessions.docker]
+name = "docker"
+root = "~/projects/containerized"
+
+[[sessions.docker.windows]]
+name = "code"
+
+[[sessions.docker.windows.panes]]
+command = "nvim"
+
+[[sessions.docker.windows]]
+name = "services"
+
+[[sessions.docker.windows.panes]]
+command = "docker-compose up"
+
+[[sessions.docker.windows]]
+name = "logs"
+layout = "even-horizontal"
+
+[[sessions.docker.windows.panes]]
+command = "docker-compose logs -f app"
+
+[[sessions.docker.windows.panes]]
+command = "docker-compose logs -f db"
+split = "horizontal"
+size = "50%"
+
+# Testing window with custom sizing
+[sessions.testing]
+name = "testing"
+root = "~/projects/myapp"
+
+[[sessions.testing.windows]]
+name = "tests"
+layout = "main-horizontal"      # Large top pane for test output
+
+[[sessions.testing.windows.panes]]
+command = "npm test -- --watch"
+
+[[sessions.testing.windows.panes]]
+command = "npm run coverage"
+size = "25%"                    # Bottom pane 25% height
+
+[[sessions.testing.windows]]
+name = "shell"
+
+[[sessions.testing.windows.panes]]
+command = ""
