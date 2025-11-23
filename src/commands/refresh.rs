@@ -12,10 +12,7 @@ use anyhow::{Context, Result};
 ///
 /// # Arguments
 /// * `session_id` - The session name or ID from config
-pub fn run(session_id: &str) -> Result<()> {
-    // Load configuration
-    let config = Config::load().context("Failed to load configuration")?;
-
+pub fn run(session_id: &str, config: Config) -> Result<()> {
     // Find session in config
     let session = config
         .get_session(session_id)

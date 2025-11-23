@@ -1,19 +1,7 @@
 use crate::config::Config;
 use anyhow::Result;
 
-pub fn run() -> Result<()> {
-    let config_path = Config::config_path()?;
-
-    if !config_path.exists() {
-        anyhow::bail!(
-            "Config file not found at {}\nRun 'tmx init' to create one.",
-            config_path.display()
-        );
-    }
-
-    // Try to load the config
-    let config = Config::load()?;
-
+pub fn run(config: Config) -> Result<()> {
     // Validate each session
     for (id, session) in &config.sessions {
         if let Err(e) = session.validate() {

@@ -8,15 +8,22 @@ pub fn run() -> Result<()> {
 
     // Check if config already exists
     if config_path.exists() {
-        println!("Configuration file already exists at {}", config_path.display());
+        println!(
+            "Configuration file already exists at {}",
+            config_path.display()
+        );
         println!("Edit it with: $EDITOR {}", config_path.display());
         return Ok(());
     }
 
     // Create config directory if it doesn't exist
     if !config_dir.exists() {
-        fs::create_dir_all(&config_dir)
-            .with_context(|| format!("Failed to create config directory: {}", config_dir.display()))?;
+        fs::create_dir_all(&config_dir).with_context(|| {
+            format!(
+                "Failed to create config directory: {}",
+                config_dir.display()
+            )
+        })?;
     }
 
     // Write default configuration

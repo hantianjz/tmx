@@ -83,11 +83,7 @@ fn startup_window_index_error(
 }
 
 /// Helper for creating startup window name validation errors
-fn startup_window_name_error(
-    session_name: &str,
-    found: &str,
-    available: &[&str],
-) -> anyhow::Error {
+fn startup_window_name_error(session_name: &str, found: &str, available: &[&str]) -> anyhow::Error {
     anyhow::anyhow!(
         "Invalid startup_window value in session '{}'\n  \
          Found: '{}'\n  \
@@ -178,8 +174,7 @@ impl Config {
 
     /// Get the config directory (always ~/.config/tmx)
     pub fn config_dir() -> Result<PathBuf> {
-        let home_dir = dirs::home_dir()
-            .context("Could not determine home directory")?;
+        let home_dir = dirs::home_dir().context("Could not determine home directory")?;
 
         Ok(home_dir.join(".config").join("tmx"))
     }
@@ -214,12 +209,11 @@ impl Session {
         let max_index = self.windows.len().saturating_sub(1);
         match &self.startup_window {
             Some(StartupWindow::Index(i)) => (*i).min(max_index),
-            Some(StartupWindow::Name(name)) => {
-                self.windows
-                    .iter()
-                    .position(|w| &w.name == name)
-                    .unwrap_or(0)
-            }
+            Some(StartupWindow::Name(name)) => self
+                .windows
+                .iter()
+                .position(|w| &w.name == name)
+                .unwrap_or(0),
             None => 0,
         }
     }
@@ -260,7 +254,13 @@ impl Session {
 
         for (i, window) in self.windows.iter().enumerate() {
             window.validate().map_err(|e| {
-                anyhow::anyhow!("Window {} ('{}') in session '{}':\n{}", i, window.name, self.name, e)
+                anyhow::anyhow!(
+                    "Window {} ('{}') in session '{}':\n{}",
+                    i,
+                    window.name,
+                    self.name,
+                    e
+                )
             })?;
         }
 
@@ -291,7 +291,11 @@ impl Window {
         // Validate layout if specified
         if let Some(ref layout) = self.layout {
             if !Self::VALID_LAYOUTS.contains(&layout.as_str()) {
-                return Err(invalid_layout_error(&self.name, layout, Self::VALID_LAYOUTS));
+                return Err(invalid_layout_error(
+                    &self.name,
+                    layout,
+                    Self::VALID_LAYOUTS,
+                ));
             }
         }
 
@@ -433,7 +437,8 @@ mod tests {
 
     #[test]
     fn test_parse_default_config() {
-        let config: Config = toml::from_str(DEFAULT_CONFIG).expect("Failed to parse default config");
+        let config: Config =
+            toml::from_str(DEFAULT_CONFIG).expect("Failed to parse default config");
         assert_eq!(config.sessions.len(), 2);
         assert!(config.sessions.contains_key("dev"));
         assert!(config.sessions.contains_key("work"));
@@ -628,8 +633,14 @@ root = "~/service-b"
         .unwrap();
 
         let session = config.sessions.get("test").unwrap();
-        assert_eq!(session.windows[0].panes[0].root.as_deref(), Some("~/service-a"));
-        assert_eq!(session.windows[0].panes[1].root.as_deref(), Some("~/service-b"));
+        assert_eq!(
+            session.windows[0].panes[0].root.as_deref(),
+            Some("~/service-a")
+        );
+        assert_eq!(
+            session.windows[0].panes[1].root.as_deref(),
+            Some("~/service-b")
+        );
     }
 
     #[test]

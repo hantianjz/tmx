@@ -14,14 +14,16 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Start or attach to a session
-    Start {
+    /// Open or attach to a session
+    #[command(alias = "o")]
+    Open {
         /// Session name or ID from config
         session: String,
     },
 
-    /// Stop a running session
-    Stop {
+    /// Close a running session
+    #[command(alias = "c")]
+    Close {
         /// Session name to stop
         session: String,
     },

@@ -2,18 +2,7 @@ use crate::config::Config;
 use crate::tmux;
 use anyhow::Result;
 
-pub fn run() -> Result<()> {
-    let config_path = Config::config_path()?;
-
-    if !config_path.exists() {
-        println!("No configuration file found at {}", config_path.display());
-        println!("Run 'tmx init' to create one.");
-        return Ok(());
-    }
-
-    // Load config
-    let config = Config::load()?;
-
+pub fn run(config: Config) -> Result<()> {
     // Get running sessions
     let running_sessions = tmux::list_sessions().unwrap_or_default();
 
@@ -48,8 +37,7 @@ pub fn run() -> Result<()> {
 }
 
 /// List only configured session names (for completions)
-pub fn list_configured() -> Result<()> {
-    let config = Config::load()?;
+pub fn list_configured(config: Config) -> Result<()> {
     for id in config.session_ids() {
         println!("{}", id);
     }

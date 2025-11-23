@@ -45,4 +45,3 @@ complete -c tmx -s h -l help -d "Show help message"
         version
     )
 }
-

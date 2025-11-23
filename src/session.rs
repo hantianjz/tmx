@@ -32,11 +32,7 @@ pub fn create_session(session: &Session) -> Result<()> {
     // Create the session with the first window
     let first_window_name = &session.windows[0].name;
     let first_window_root = session.windows[0].root_expanded(&session_root);
-    tmux::new_session(
-        session_name,
-        first_window_name,
-        Some(&first_window_root),
-    )?;
+    tmux::new_session(session_name, first_window_name, Some(&first_window_root))?;
 
     // Process each window
     for (window_offset, window) in session.windows.iter().enumerate() {
@@ -160,7 +156,9 @@ fn determine_layout(window: &crate::config::Window, pane_count: usize) -> &str {
 /// Simple shell escaping for environment variable values
 fn shell_escape(s: &str) -> String {
     const SPECIAL_CHARS: &str = "'\"`$\\";
-    let needs_escaping = s.chars().any(|c| c.is_whitespace() || SPECIAL_CHARS.contains(c));
+    let needs_escaping = s
+        .chars()
+        .any(|c| c.is_whitespace() || SPECIAL_CHARS.contains(c));
 
     if needs_escaping {
         format!("'{}'", s.replace('\'', "'\\''"))

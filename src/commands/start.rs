@@ -22,25 +22,20 @@ fn attach_or_switch(session_name: &str) -> Result<()> {
 ///
 /// # Arguments
 /// * `session_id` - The session ID from the configuration file
-pub fn run(session_id: &str) -> Result<()> {
+pub fn run(session_id: &str, config: Config) -> Result<()> {
     // Check if tmux is installed
     if !tmux::is_installed() {
         anyhow::bail!("tmux is not installed");
     }
 
-    // Load config
-    let config = Config::load()?;
-
     // Find the session
-    let session = config
-        .get_session(session_id)
-        .ok_or_else(|| {
-            anyhow::anyhow!(
-                "Session '{}' not found in configuration\nAvailable sessions: {}",
-                session_id,
-                config.session_ids().join(", ")
-            )
-        })?;
+    let session = config.get_session(session_id).ok_or_else(|| {
+        anyhow::anyhow!(
+            "Session '{}' not found in configuration\nAvailable sessions: {}",
+            session_id,
+            config.session_ids().join(", ")
+        )
+    })?;
 
     let session_name = &session.name;
 
