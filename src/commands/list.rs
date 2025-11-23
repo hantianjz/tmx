@@ -18,16 +18,19 @@ pub fn run() -> Result<()> {
     let running_sessions = tmux::list_sessions().unwrap_or_default();
 
     println!("Configured sessions:");
-    if config.sessions.is_empty() {
+    let session_ids = config.session_ids();
+    if session_ids.is_empty() {
         println!("  (none)");
     } else {
-        for (id, session) in &config.sessions {
-            let status = if running_sessions.contains(&session.name) {
-                " (running)"
-            } else {
-                ""
-            };
-            println!("  {}{}", id, status);
+        for id in session_ids {
+            if let Some(session) = config.sessions.get(&id) {
+                let status = if running_sessions.contains(&session.name) {
+                    " (running)"
+                } else {
+                    ""
+                };
+                println!("  {}{}", id, status);
+            }
         }
     }
 

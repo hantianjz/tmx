@@ -8,6 +8,8 @@ use std::path::PathBuf;
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Config {
     pub sessions: HashMap<String, Session>,
+    #[serde(default)]
+    pub default: Option<String>,
 }
 
 /// Startup window specification (by name or index)
@@ -364,6 +366,9 @@ fn validate_size_format(size: &str, pane_index: usize, window_name: &str) -> Res
 /// Default configuration template
 pub const DEFAULT_CONFIG: &str = r#"# TMX Configuration
 # Define your tmux sessions here
+
+# Default session to start when no sessions are running (optional)
+default = "dev"
 
 # Simple development session
 [sessions.dev]

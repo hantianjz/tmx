@@ -26,6 +26,13 @@ pub enum Commands {
         session: String,
     },
 
+    /// Refresh the layout of a running session
+    #[command(alias = "r")]
+    Refresh {
+        /// Session name to refresh
+        session: String,
+    },
+
     /// List configured and running sessions (default)
     #[command(alias = "ls")]
     List,

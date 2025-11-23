@@ -27,6 +27,7 @@ fn run() -> Result<()> {
     match cli.command {
         Some(Commands::Start { session }) => commands::start::run(&session),
         Some(Commands::Stop { session }) => commands::stop::run(&session),
+        Some(Commands::Refresh { session }) => commands::refresh::run(&session),
         Some(Commands::List) => commands::list::run(),
         Some(Commands::Init) => commands::init::run(),
         Some(Commands::Validate) => commands::validate::run(),
@@ -37,8 +38,8 @@ fn run() -> Result<()> {
         Some(Commands::ListConfigured) => commands::list::list_configured(),
         Some(Commands::ListRunning) => commands::list::list_running(),
         None => {
-            // Default command: list sessions
-            commands::list::run()
+            // Default command: cycle through sessions
+            commands::cycle::run()
         }
     }
 }

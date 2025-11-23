@@ -43,13 +43,15 @@ pub fn is_inside_tmux() -> bool {
 /// # Returns
 /// The base-index value, or 0 if not set or if an error occurs.
 pub fn get_base_index() -> Result<usize> {
+    static DEFAULT_BASE_INDEX: usize = 1;
+
     let output = Command::new("tmux")
         .args(["show-options", "-g", "base-index"])
         .output()
         .context("Failed to get tmux base-index")?;
 
     if !output.status.success() {
-        return Ok(0); // Default to 0 if option not set
+        return Ok(DEFAULT_BASE_INDEX); // Default to 1 if option not set
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -58,7 +60,7 @@ pub fn get_base_index() -> Result<usize> {
         .split_whitespace()
         .last()
         .and_then(|s| s.parse().ok())
-        .unwrap_or(0);
+        .unwrap_or(DEFAULT_BASE_INDEX);
 
     Ok(index)
 }
@@ -98,6 +100,32 @@ pub fn list_sessions() -> Result<Vec<String>> {
     let sessions: Vec<String> = stdout.lines().map(|s| s.to_string()).collect();
 
     Ok(sessions)
+}
+
+/// Get the current tmux session name (only works when inside tmux).
+///
+/// # Returns
+/// The current session name, or an error if not inside tmux or command fails.
+pub fn get_current_session() -> Result<String> {
+    let output = execute_tmux(&["display-message", "-p", "#{session_name}"])?;
+    let session = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    Ok(session)
+}
+
+/// Count the number of panes in a specific window.
+///
+/// # Arguments
+/// * `session` - The session name
+/// * `window_index` - The window index
+///
+/// # Returns
+/// The number of panes in the window.
+pub fn count_panes(session: &str, window_index: usize) -> Result<usize> {
+    let target = window_target(session, window_index);
+    let output = execute_tmux(&["list-panes", "-t", &target, "-F", "#{pane_index}"])?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let count = stdout.lines().count();
+    Ok(count)
 }
 
 /// Create a new tmux session
@@ -159,6 +187,30 @@ pub fn split_window_with_size(
     }
 
     // Debug: print command being executed
+    if is_debug_mode() {
+        eprintln!("DEBUG: tmux {}", args.join(" "));
+    }
+
+    execute_tmux(&args)?;
+    Ok(())
+}
+
+/// Split a window without specifying size (for refresh operations)
+pub fn split_window(
+    session: &str,
+    window_index: usize,
+    horizontal: bool,
+    root: Option<&str>,
+) -> Result<()> {
+    let target = window_target(session, window_index);
+    let split_flag = if horizontal { "-h" } else { "-v" };
+    let mut args = vec!["split-window", "-t", &target, split_flag];
+
+    if let Some(dir) = root {
+        args.push("-c");
+        args.push(dir);
+    }
+
     if is_debug_mode() {
         eprintln!("DEBUG: tmux {}", args.join(" "));
     }
