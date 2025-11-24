@@ -1,4 +1,5 @@
-use crate::config::Config;
+use crate::context::Context as AppContext;
+use crate::session;
 use crate::tmux;
 use anyhow::{Context, Result};
 
@@ -12,7 +13,11 @@ use anyhow::{Context, Result};
 ///
 /// # Arguments
 /// * `session_id` - The session name or ID from config
-pub fn run(session_id: &str, config: Config) -> Result<()> {
+/// * `ctx` - Shared context containing configuration and state
+pub fn run(session_id: &str, ctx: &AppContext) -> Result<()> {
+    // Get config from context (lazy-loaded)
+    let config = ctx.config()?;
+
     // Find session in config
     let session = config
         .get_session(session_id)
@@ -27,8 +32,9 @@ pub fn run(session_id: &str, config: Config) -> Result<()> {
 
     println!("Refreshing layout for session '{}'...", session_name);
 
-    // Get tmux base-index
-    let base_index = tmux::get_base_index()?;
+    // Get tmux base-index from context (cached)
+    let base_index = ctx.base_index()?;
+    let verbose = ctx.is_verbose();
     let session_root = session.root_expanded();
 
     // Process each window
@@ -52,16 +58,17 @@ pub fn run(session_id: &str, config: Config) -> Result<()> {
             let panes_to_add = expected_pane_count - current_pane_count;
             println!("    Adding {} pane(s)...", panes_to_add);
 
-            for pane_idx in current_pane_count..expected_pane_count {
-                let pane = &window.panes[pane_idx];
-                let pane_root = pane.root_expanded(&window_root);
-
-                // Determine split direction using the same logic as session creation
-                let horizontal = determine_split_direction(pane_idx, pane);
-
-                // Create the pane (without size, since we're refreshing)
-                tmux::split_window(session_name, window_index, horizontal, Some(&pane_root))?;
-            }
+            // Create additional panes using shared logic
+            // Don't apply sizes here - let apply_window_layout handle it
+            session::create_window_panes(
+                session_name,
+                window_index,
+                window,
+                &window_root,
+                current_pane_count,
+                false, // Don't apply sizes here - let apply_window_layout handle it
+                verbose,
+            )?;
         } else if current_pane_count > expected_pane_count {
             println!(
                 "    Keeping {} extra pane(s) (not removing)",
@@ -69,57 +76,13 @@ pub fn run(session_id: &str, config: Config) -> Result<()> {
             );
         }
 
-        // Reapply layout only if no custom sizes are specified
-        if expected_pane_count > 1 && should_apply_layout(window) {
-            let layout = determine_layout(window, expected_pane_count);
-            println!("    Applying layout: {}", layout);
-            tmux::select_layout(session_name, window_index, layout)?;
+        // Always apply layout and custom sizes during refresh
+        if expected_pane_count > 1 {
+            println!("    Applying layout and sizes...");
+            session::apply_window_layout(session_name, window_index, window, verbose)?;
         }
     }
 
     println!("✓ Session '{}' layout refreshed", session_name);
     Ok(())
-}
-
-/// Check if we should apply a layout to the window
-/// Returns false if any pane has a custom size (to preserve manual sizing)
-fn should_apply_layout(window: &crate::config::Window) -> bool {
-    // IMPORTANT: Tmux's select-layout command resets ALL pane sizes
-    // So if ANY pane has a custom size, we must skip layout application
-    // to preserve the user's sizing
-    if window.panes.iter().any(|p| p.size.is_some()) {
-        return false;
-    }
-
-    // Apply layout if explicitly set or use default for multi-pane windows
-    true
-}
-
-/// Determine split direction based on pane config or default pattern
-///
-/// Returns `true` for horizontal split (side-by-side), `false` for vertical split (top-bottom).
-/// If no explicit split direction is configured, uses an alternating pattern:
-/// - Pane 1, 3, 5... → horizontal (side-by-side)
-/// - Pane 2, 4, 6... → vertical (top-bottom)
-fn determine_split_direction(pane_index: usize, pane: &crate::config::Pane) -> bool {
-    if let Some(ref split) = pane.split {
-        split == "horizontal"
-    } else {
-        // Default alternating pattern: odd indices get horizontal splits
-        pane_index % 2 == 1
-    }
-}
-
-/// Determine layout for window
-fn determine_layout(window: &crate::config::Window, pane_count: usize) -> &str {
-    if let Some(ref layout) = window.layout {
-        layout
-    } else {
-        // Default behavior: even-horizontal for 2, tiled for 3+
-        if pane_count == 2 {
-            "even-horizontal"
-        } else {
-            "tiled"
-        }
-    }
 }

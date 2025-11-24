@@ -1,8 +1,11 @@
-use crate::config::Config;
+use crate::context::Context;
 use crate::tmux;
 use anyhow::Result;
 
-pub fn run(config: Config) -> Result<()> {
+pub fn run(ctx: &Context) -> Result<()> {
+    // Get config from context (lazy-loaded)
+    let config = ctx.config()?;
+
     // Get running sessions
     let running_sessions = tmux::list_sessions().unwrap_or_default();
 
@@ -37,7 +40,8 @@ pub fn run(config: Config) -> Result<()> {
 }
 
 /// List only configured session names (for completions)
-pub fn list_configured(config: Config) -> Result<()> {
+pub fn list_configured(ctx: &Context) -> Result<()> {
+    let config = ctx.config()?;
     for id in config.session_ids() {
         println!("{}", id);
     }

@@ -1,4 +1,5 @@
 use crate::config::Config;
+use crate::context::Context as AppContext;
 use crate::tmux;
 use anyhow::{Context, Result};
 
@@ -10,7 +11,7 @@ use anyhow::{Context, Result};
 /// - If outside tmux: attach to first running session
 ///
 /// Cycling order: configured sessions (alphabetically), then unconfigured sessions (alphabetically)
-pub fn run() -> Result<()> {
+pub fn run(ctx: &AppContext) -> Result<()> {
     // Check if tmux is installed
     if !tmux::is_installed() {
         anyhow::bail!("tmux is not installed");
@@ -21,7 +22,7 @@ pub fn run() -> Result<()> {
 
     if running.is_empty() {
         // No sessions running, start default or first from config
-        let config = Config::load().context("Failed to load configuration")?;
+        let config = ctx.config().context("Failed to load configuration")?;
 
         // Use default session if specified, otherwise use first session
         let session_id = if let Some(ref default) = config.default {
@@ -44,15 +45,15 @@ pub fn run() -> Result<()> {
         };
 
         println!("No sessions running. Starting '{}'...", session_id);
-        return crate::commands::start::run(&session_id);
+        return crate::commands::start::run(&session_id, ctx);
     }
 
-    // Load config to determine session ordering
-    let config = Config::load().ok();
-    let ordered_sessions = order_sessions(&running, config.as_ref());
+    // Get config from context to determine session ordering (only load once!)
+    let config = ctx.config().ok();
+    let ordered_sessions = order_sessions(&running, config);
 
     // If inside tmux, get current session and switch to next
-    if tmux::is_inside_tmux() {
+    if ctx.is_inside_tmux {
         let current = tmux::get_current_session()?;
         let next = find_next_session(&ordered_sessions, &current);
         println!("Switching to session '{}'...", next);

@@ -11,11 +11,6 @@ fn pane_target(session: &str, window_index: usize, pane_index: usize) -> String 
     format!("{}:{}.{}", session, window_index, pane_index)
 }
 
-/// Check if debug mode is enabled
-fn is_debug_mode() -> bool {
-    std::env::var("TMX_DEBUG").is_ok()
-}
-
 /// Check if tmux is currently installed and available in PATH.
 ///
 /// # Returns
@@ -26,14 +21,6 @@ pub fn is_installed() -> bool {
         .output()
         .map(|o| o.status.success())
         .unwrap_or(false)
-}
-
-/// Check if we're currently running inside a tmux session.
-///
-/// # Returns
-/// `true` if inside a tmux session (TMUX env var is set), `false` otherwise.
-pub fn is_inside_tmux() -> bool {
-    std::env::var("TMUX").is_ok()
 }
 
 /// Get the tmux base-index setting from global options.
@@ -128,6 +115,39 @@ pub fn count_panes(session: &str, window_index: usize) -> Result<usize> {
     Ok(count)
 }
 
+/// Get window dimensions (width and height in cells/lines)
+///
+/// # Arguments
+/// * `session` - The session name
+/// * `window_index` - The window index
+///
+/// # Returns
+/// A tuple of (width, height) in cells/lines
+pub fn get_window_dimensions(session: &str, window_index: usize) -> Result<(usize, usize)> {
+    let target = window_target(session, window_index);
+    let output = execute_tmux(&[
+        "display-message",
+        "-t",
+        &target,
+        "-p",
+        "#{window_width} #{window_height}",
+    ])?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let parts: Vec<&str> = stdout.split_whitespace().collect();
+
+    if parts.len() != 2 {
+        anyhow::bail!("Failed to parse window dimensions: {}", stdout);
+    }
+
+    let width = parts[0].parse::<usize>()
+        .context("Failed to parse window width")?;
+    let height = parts[1].parse::<usize>()
+        .context("Failed to parse window height")?;
+
+    Ok((width, height))
+}
+
 /// Create a new tmux session
 pub fn new_session(name: &str, window_name: &str, root: Option<&str>) -> Result<()> {
     let mut args = vec!["new-session", "-d", "-s", name, "-n", window_name];
@@ -162,6 +182,7 @@ pub fn split_window_with_size(
     horizontal: bool,
     size: Option<&str>,
     root: Option<&str>,
+    verbose: bool,
 ) -> Result<()> {
     let target = window_target(session, window_index);
     let split_flag = if horizontal { "-h" } else { "-v" };
@@ -187,32 +208,8 @@ pub fn split_window_with_size(
     }
 
     // Debug: print command being executed
-    if is_debug_mode() {
-        eprintln!("DEBUG: tmux {}", args.join(" "));
-    }
-
-    execute_tmux(&args)?;
-    Ok(())
-}
-
-/// Split a window without specifying size (for refresh operations)
-pub fn split_window(
-    session: &str,
-    window_index: usize,
-    horizontal: bool,
-    root: Option<&str>,
-) -> Result<()> {
-    let target = window_target(session, window_index);
-    let split_flag = if horizontal { "-h" } else { "-v" };
-    let mut args = vec!["split-window", "-t", &target, split_flag];
-
-    if let Some(dir) = root {
-        args.push("-c");
-        args.push(dir);
-    }
-
-    if is_debug_mode() {
-        eprintln!("DEBUG: tmux {}", args.join(" "));
+    if verbose {
+        eprintln!("tmux {}", args.join(" "));
     }
 
     execute_tmux(&args)?;
@@ -220,15 +217,54 @@ pub fn split_window(
 }
 
 /// Apply a layout to a window
-pub fn select_layout(session: &str, window_index: usize, layout: &str) -> Result<()> {
+pub fn select_layout(
+    session: &str,
+    window_index: usize,
+    layout: &str,
+    verbose: bool,
+) -> Result<()> {
     let target = window_target(session, window_index);
 
     // Debug: print layout command
-    if is_debug_mode() {
-        eprintln!("DEBUG: tmux select-layout -t {} {}", target, layout);
+    if verbose {
+        eprintln!("tmux select-layout -t {} {}", target, layout);
     }
 
     execute_tmux(&["select-layout", "-t", &target, layout])?;
+    Ok(())
+}
+
+/// Resize a specific pane to an absolute size
+///
+/// # Arguments
+/// * `session` - The session name
+/// * `window_index` - The window index
+/// * `pane_index` - The pane index
+/// * `size` - Absolute size in cells/lines (already calculated from percentage if needed)
+/// * `is_horizontal` - True for horizontal split (resize width), false for vertical (resize height)
+/// * `verbose` - Whether to print debug info
+pub fn resize_pane(
+    session: &str,
+    window_index: usize,
+    pane_index: usize,
+    size: usize,
+    is_horizontal: bool,
+    verbose: bool,
+) -> Result<()> {
+    let target = pane_target(session, window_index, pane_index);
+    let size_str = size.to_string();
+
+    // For horizontal splits, we resize width (-x)
+    // For vertical splits, we resize height (-y)
+    let dimension_flag = if is_horizontal { "-x" } else { "-y" };
+
+    let args = vec!["resize-pane", "-t", &target, dimension_flag, &size_str];
+
+    if verbose {
+        eprintln!("tmux {}", args.join(" "));
+    }
+
+    execute_tmux(&args)?;
     Ok(())
 }
 

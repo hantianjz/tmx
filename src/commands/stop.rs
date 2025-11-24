@@ -1,7 +1,8 @@
+use crate::context::Context;
 use crate::tmux;
 use anyhow::Result;
 
-pub fn run(session_name: &str) -> Result<()> {
+pub fn run(session_name: &str, _ctx: &Context) -> Result<()> {
     // Check if tmux is installed
     if !tmux::is_installed() {
         anyhow::bail!("tmux is not installed");

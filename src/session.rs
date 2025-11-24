@@ -1,4 +1,5 @@
 use crate::config::Session;
+use crate::context::Context;
 use crate::tmux;
 use anyhow::Result;
 
@@ -9,16 +10,18 @@ use anyhow::Result;
 ///
 /// # Arguments
 /// * `session` - The session configuration to create
+/// * `ctx` - Shared context containing configuration and state
 ///
 /// # Errors
 /// Returns an error if validation fails, tmux commands fail, or if
 /// any part of the session creation process encounters an issue.
-pub fn create_session(session: &Session) -> Result<()> {
+pub fn create_session(session: &Session, ctx: &Context) -> Result<()> {
     // Validate session
     session.validate()?;
 
-    // Get tmux base-index
-    let base_index = tmux::get_base_index()?;
+    // Get tmux base-index from context (cached)
+    let base_index = ctx.base_index()?;
+    let verbose = ctx.is_verbose();
 
     let session_name = &session.name;
     let session_root = session.root_expanded();
@@ -49,29 +52,19 @@ pub fn create_session(session: &Session) -> Result<()> {
 
         if pane_count > 1 {
             // Create additional panes (first pane already exists)
-            for pane_idx in 1..pane_count {
-                let pane = &window.panes[pane_idx];
-                let pane_root = pane.root_expanded(&window_root);
+            // Don't apply sizes during creation since apply_window_layout will handle it
+            create_window_panes(
+                session_name,
+                window_index,
+                window,
+                &window_root,
+                1, // Start at index 1 (first pane already exists)
+                false, // Don't apply sizes here - let apply_window_layout handle it
+                verbose,
+            )?;
 
-                // Determine split direction
-                let horizontal = determine_split_direction(pane_idx, pane);
-
-                // Create the pane with optional size
-                tmux::split_window_with_size(
-                    session_name,
-                    window_index,
-                    horizontal,
-                    pane.size.as_deref(),
-                    Some(&pane_root),
-                )?;
-            }
-
-            // Apply layout only if no custom sizes are specified
-            // (select-layout overrides custom sizes, so we skip it if sizes are set)
-            if should_apply_layout(window) {
-                let layout = determine_layout(window, pane_count);
-                tmux::select_layout(session_name, window_index, layout)?;
-            }
+            // Always apply layout and sizes
+            apply_window_layout(session_name, window_index, window, verbose)?;
         }
 
         // Send commands to all panes in this window
@@ -110,18 +103,122 @@ pub fn create_session(session: &Session) -> Result<()> {
     Ok(())
 }
 
-/// Check if we should apply a layout to the window
-/// Returns false if any pane has a custom size (to preserve manual sizing)
-fn should_apply_layout(window: &crate::config::Window) -> bool {
-    // IMPORTANT: Tmux's select-layout command resets ALL pane sizes
-    // So if ANY pane has a custom size, we must skip layout application
-    // to preserve the user's sizing
-    if window.panes.iter().any(|p| p.size.is_some()) {
-        return false;
+/// Create panes for a window
+///
+/// This function creates additional panes for a window (beyond the first pane which already exists).
+/// It can be used both during initial session creation and during refresh operations.
+///
+/// # Arguments
+/// * `session_name` - The tmux session name
+/// * `window_index` - The window index
+/// * `window` - The window configuration
+/// * `window_root` - The window's root directory
+/// * `start_idx` - Starting pane index (1 for new windows, current_count for refresh)
+/// * `apply_sizes` - Whether to apply custom pane sizes from config
+/// * `verbose` - Whether to print debug info
+///
+/// # Returns
+/// Returns Ok(()) on success, or an error if pane creation fails
+pub fn create_window_panes(
+    session_name: &str,
+    window_index: usize,
+    window: &crate::config::Window,
+    window_root: &str,
+    start_idx: usize,
+    apply_sizes: bool,
+    verbose: bool,
+) -> Result<()> {
+    let pane_count = window.panes.len();
+
+    for pane_idx in start_idx..pane_count {
+        let pane = &window.panes[pane_idx];
+        let pane_root = pane.root_expanded(window_root);
+        let horizontal = determine_split_direction(pane_idx, pane);
+
+        // Apply size if requested and pane has custom size
+        let size = if apply_sizes {
+            pane.size.as_deref()
+        } else {
+            None
+        };
+
+        tmux::split_window_with_size(
+            session_name,
+            window_index,
+            horizontal,
+            size,
+            Some(&pane_root),
+            verbose,
+        )?;
     }
 
-    // Apply layout if explicitly set or use default for multi-pane windows
-    true
+    Ok(())
+}
+
+/// Apply layout and custom pane sizes to a window
+///
+/// This function:
+/// 1. Applies a layout to the window (if configured or using defaults)
+/// 2. Applies custom pane sizes (which override the layout sizing)
+///
+/// # Arguments
+/// * `session_name` - The tmux session name
+/// * `window_index` - The window index
+/// * `window` - The window configuration
+/// * `verbose` - Whether to print debug info
+///
+/// # Returns
+/// Returns Ok(()) on success, or an error if layout/size application fails
+pub fn apply_window_layout(
+    session_name: &str,
+    window_index: usize,
+    window: &crate::config::Window,
+    verbose: bool,
+) -> Result<()> {
+    let pane_count = window.panes.len();
+
+    if pane_count > 1 {
+        // First apply the layout (if no custom sizes, or as base before applying sizes)
+        let layout = determine_layout(window, pane_count);
+        tmux::select_layout(session_name, window_index, layout, verbose)?;
+
+        // Get window dimensions for calculating percentage-based sizes
+        let (window_width, window_height) = tmux::get_window_dimensions(session_name, window_index)?;
+
+        // Then apply custom pane sizes (which override the layout)
+        for (pane_idx, pane) in window.panes.iter().enumerate() {
+            if let Some(ref size_spec) = pane.size {
+                // Determine split direction to know which dimension to resize
+                let is_horizontal = determine_split_direction(pane_idx, pane);
+
+                // Calculate absolute size from percentage or use as-is
+                let absolute_size = if size_spec.ends_with('%') {
+                    let percentage = size_spec.trim_end_matches('%')
+                        .parse::<f64>()
+                        .map_err(|_| anyhow::anyhow!("Invalid percentage: {}", size_spec))?;
+
+                    // Calculate based on the dimension we're resizing
+                    let dimension = if is_horizontal { window_width } else { window_height };
+                    ((dimension as f64) * (percentage / 100.0)) as usize
+                } else {
+                    // Absolute size
+                    size_spec.parse::<usize>()
+                        .map_err(|_| anyhow::anyhow!("Invalid size: {}", size_spec))?
+                };
+
+                tmux::resize_pane(
+                    session_name,
+                    window_index,
+                    pane_idx,
+                    absolute_size,
+                    is_horizontal,
+                    verbose,
+                )?;
+            }
+        }
+    }
+
+    Ok(())
 }
 
 /// Determine split direction based on pane config or default pattern
@@ -130,7 +227,7 @@ fn should_apply_layout(window: &crate::config::Window) -> bool {
 /// If no explicit split direction is configured, uses an alternating pattern:
 /// - Pane 1, 3, 5... → horizontal (side-by-side)
 /// - Pane 2, 4, 6... → vertical (top-bottom)
-fn determine_split_direction(pane_index: usize, pane: &crate::config::Pane) -> bool {
+pub fn determine_split_direction(pane_index: usize, pane: &crate::config::Pane) -> bool {
     if let Some(ref split) = pane.split {
         split == "horizontal"
     } else {
@@ -140,7 +237,7 @@ fn determine_split_direction(pane_index: usize, pane: &crate::config::Pane) -> b
 }
 
 /// Determine layout for window
-fn determine_layout(window: &crate::config::Window, pane_count: usize) -> &str {
+pub fn determine_layout(window: &crate::config::Window, pane_count: usize) -> &str {
     if let Some(ref layout) = window.layout {
         layout
     } else {

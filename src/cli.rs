@@ -8,6 +8,10 @@ pub struct Cli {
     #[arg(short, long, global = true)]
     pub config: Option<String>,
 
+    /// Enable verbose/debug output (prints tmux commands)
+    #[arg(short, long, global = true)]
+    pub verbose: bool,
+
     #[command(subcommand)]
     pub command: Option<Commands>,
 }

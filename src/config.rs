@@ -125,13 +125,14 @@ fn invalid_split_error(pane_index: usize, window_name: &str, found: &str) -> any
 }
 
 impl Config {
-    /// Load configuration from the default location.
+    /// Load configuration from the default location (~/.config/tmx/tmx.toml).
     ///
-    /// Uses the path from `TMX_CONFIG_PATH` environment variable if set,
-    /// otherwise defaults to `~/.config/tmx/tmx.toml`.
+    /// Note: This uses only the default path. For CLI --config and TMX_CONFIG_PATH
+    /// env var support, use Context instead.
     ///
     /// # Errors
     /// Returns an error if the config file cannot be read, parsed, or is empty.
+    #[allow(dead_code)]
     pub fn load() -> Result<Self> {
         let path = Self::config_path()?;
         Self::load_from(&path)
@@ -160,14 +161,11 @@ impl Config {
         Ok(config)
     }
 
-    /// Get the config file path (respects TMX_CONFIG_PATH env var)
+    /// Get the default config file path (~/.config/tmx/tmx.toml)
+    ///
+    /// Note: This returns the default path only. For env var handling,
+    /// use Context which reads TMX_CONFIG_PATH at startup.
     pub fn config_path() -> Result<PathBuf> {
-        // Check for custom config path from environment variable
-        if let Ok(custom_path) = std::env::var("TMX_CONFIG_PATH") {
-            return Ok(PathBuf::from(shellexpand::tilde(&custom_path).to_string()));
-        }
-
-        // Use default path
         let config_dir = Self::config_dir()?;
         Ok(config_dir.join("tmx.toml"))
     }

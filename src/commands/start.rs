@@ -1,4 +1,4 @@
-use crate::config::Config;
+use crate::context::Context;
 use crate::session;
 use crate::tmux;
 use anyhow::Result;
@@ -7,8 +7,8 @@ use anyhow::Result;
 ///
 /// If already inside tmux, switches the client to the target session.
 /// Otherwise, attaches to the session from outside tmux.
-fn attach_or_switch(session_name: &str) -> Result<()> {
-    if tmux::is_inside_tmux() {
+fn attach_or_switch(session_name: &str, ctx: &Context) -> Result<()> {
+    if ctx.is_inside_tmux {
         tmux::switch_client(session_name)
     } else {
         tmux::attach_session(session_name)
@@ -22,11 +22,15 @@ fn attach_or_switch(session_name: &str) -> Result<()> {
 ///
 /// # Arguments
 /// * `session_id` - The session ID from the configuration file
-pub fn run(session_id: &str, config: Config) -> Result<()> {
+/// * `ctx` - Shared context containing configuration and state
+pub fn run(session_id: &str, ctx: &Context) -> Result<()> {
     // Check if tmux is installed
     if !tmux::is_installed() {
         anyhow::bail!("tmux is not installed");
     }
+
+    // Get config from context (lazy-loaded)
+    let config = ctx.config()?;
 
     // Find the session
     let session = config.get_session(session_id).ok_or_else(|| {
@@ -42,12 +46,12 @@ pub fn run(session_id: &str, config: Config) -> Result<()> {
     // Check if session already exists
     if tmux::has_session(session_name)? {
         println!("Session '{}' already exists. Attaching...", session_name);
-        attach_or_switch(session_name)?;
+        attach_or_switch(session_name, ctx)?;
     } else {
         // Create the session
-        session::create_session(session)?;
+        session::create_session(session, ctx)?;
         // Attach to the newly created session
-        attach_or_switch(session_name)?;
+        attach_or_switch(session_name, ctx)?;
     }
 
     Ok(())
