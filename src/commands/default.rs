@@ -1,6 +1,6 @@
-use crate::config::Config;
 use crate::context::Context as AppContext;
 use crate::tmux;
+use crate::{commands::refresh, config::Config};
 use anyhow::{Context, Result};
 
 /// Cycle through running tmux sessions, or start the first configured session if none are running.
@@ -55,9 +55,7 @@ pub fn run(ctx: &AppContext) -> Result<()> {
     // If inside tmux, get current session and switch to next
     if ctx.is_inside_tmux {
         let current = tmux::get_current_session()?;
-        let next = find_next_session(&ordered_sessions, &current);
-        println!("Switching to session '{}'...", next);
-        return tmux::switch_client(&next);
+        return refresh::run(&current, ctx);
     }
 
     // Not in tmux, attach to first session
@@ -102,43 +100,4 @@ fn order_sessions(running: &[String], config: Option<&Config>) -> Vec<String> {
     }
 
     result
-}
-
-/// Find the next session in the cycle
-fn find_next_session(sessions: &[String], current: &str) -> String {
-    let pos = sessions.iter().position(|s| s == current);
-    match pos {
-        Some(i) => {
-            // Cycle to next session (wrap around to first if at end)
-            sessions[(i + 1) % sessions.len()].clone()
-        }
-        None => {
-            // Current session not in list, go to first
-            sessions[0].clone()
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_find_next_session() {
-        let sessions = vec!["dev".to_string(), "work".to_string(), "test".to_string()];
-
-        assert_eq!(find_next_session(&sessions, "dev"), "work");
-        assert_eq!(find_next_session(&sessions, "work"), "test");
-        assert_eq!(find_next_session(&sessions, "test"), "dev"); // wrap around
-
-        // Current not in list
-        assert_eq!(find_next_session(&sessions, "other"), "dev");
-    }
-
-    #[test]
-    fn test_order_sessions_no_config() {
-        let running = vec!["zebra".to_string(), "alpha".to_string(), "beta".to_string()];
-        let ordered = order_sessions(&running, None);
-        assert_eq!(ordered, vec!["alpha", "beta", "zebra"]);
-    }
 }

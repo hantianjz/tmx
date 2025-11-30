@@ -1,5 +1,5 @@
 pub mod completions;
-pub mod cycle;
+pub mod default;
 pub mod init;
 pub mod list;
 pub mod refresh;

@@ -39,7 +39,7 @@ fn run() -> Result<()> {
         Some(Commands::ListRunning) => commands::list::list_running(),
         None => {
             // Default command: cycle through sessions
-            commands::cycle::run(&ctx)
+            commands::default::run(&ctx)
         }
     }
 }

@@ -39,7 +39,7 @@ pub enum Commands {
         session: String,
     },
 
-    /// List configured and running sessions (default)
+    /// List configured and running sessions
     #[command(alias = "ls")]
     List,
 
