@@ -54,20 +54,15 @@ release:
 
     Released by [GoReleaser](https://github.com/goreleaser/goreleaser).
 
-brews:
+homebrew_casks:
   - name: tmx
     homepage: https://github.com/hantianjz/tmx
     description: Terminal multiplexer wrapper and session manager
-    license: MIT
     repository:
       owner: hantianjz
       name: homebrew-tap
       branch: main
-    directory: Formula
+    directory: Casks
     commit_author:
       name: github-actions[bot]
       email: github-actions[bot]@users.noreply.github.com
-    install: |
-      bin.install "tmx"
-    test: |
-      assert_match version.to_s, shell_output("#{bin}/tmx --version")
