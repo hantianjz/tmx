@@ -260,6 +260,31 @@ cargo run -- init
 cargo run -- start dev
 ```
 
+### Releasing
+
+Releases are managed with [GoReleaser](https://goreleaser.com/). To create a new release:
+
+```bash
+# Tag the release
+git tag -a v0.1.0 -m "Release v0.1.0"
+git push origin v0.1.0
+
+# Run GoReleaser (requires GITHUB_TOKEN with repo access)
+export GITHUB_TOKEN="your-token"
+goreleaser release --clean
+```
+
+GoReleaser will:
+1. Build binaries for Linux and macOS (x86_64 and arm64)
+2. Create a GitHub release with the binaries
+3. Update the Homebrew formula in [homebrew-tap](https://github.com/hantianjz/homebrew-tap)
+
+For local testing without publishing:
+
+```bash
+goreleaser release --snapshot --clean
+```
+
 ## License
 
 This is free and unencumbered software released into the public domain. See [UNLICENSE](./UNLICENSE) for details.
