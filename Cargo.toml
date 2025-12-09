@@ -1,6 +1,6 @@
 [package]
 name = "tmx"
-version = "0.0.2"
+version = "0.0.6"
 edition = "2024"
 authors = ["hjz"]
 description = "A tmux session manager with declarative TOML configuration"

@@ -8,13 +8,20 @@ pub fn generate_completions() -> String {
 complete -c tmx -f
 
 # Subcommands
-complete -c tmx -n "__fish_use_subcommand" -a "start" -d "Start/attach to session"
-complete -c tmx -n "__fish_use_subcommand" -a "stop" -d "Stop session"
+complete -c tmx -n "__fish_use_subcommand" -a "open" -d "Open/attach to session"
+complete -c tmx -n "__fish_use_subcommand" -a "close" -d "Close session"
+complete -c tmx -n "__fish_use_subcommand" -a "refresh" -d "Refresh session layout"
 complete -c tmx -n "__fish_use_subcommand" -a "list" -d "List configured and running sessions"
 complete -c tmx -n "__fish_use_subcommand" -a "init" -d "Initialize config file"
 complete -c tmx -n "__fish_use_subcommand" -a "validate" -d "Validate config syntax"
 complete -c tmx -n "__fish_use_subcommand" -a "completions" -d "Generate shell completions"
 complete -c tmx -n "__fish_use_subcommand" -a "help" -d "Show help message"
+
+# Command aliases
+complete -c tmx -n "__fish_use_subcommand" -a "o" -d "Alias for open"
+complete -c tmx -n "__fish_use_subcommand" -a "c" -d "Alias for close"
+complete -c tmx -n "__fish_use_subcommand" -a "r" -d "Alias for refresh"
+complete -c tmx -n "__fish_use_subcommand" -a "ls" -d "Alias for list"
 
 # Helper functions
 function __tmx_using_command
@@ -30,14 +37,22 @@ function __tmx_running_sessions
     tmx __list-running 2>/dev/null
 end
 
-# Dynamic completions for start (configured sessions)
-complete -c tmx -n "__tmx_using_command start" -a "(__tmx_configured_sessions)" -d "Session"
+# Dynamic completions for open (configured sessions)
+complete -c tmx -n "__tmx_using_command open" -a "(__tmx_configured_sessions)" -d "Session"
+complete -c tmx -n "__tmx_using_command o" -a "(__tmx_configured_sessions)" -d "Session"
 
-# Dynamic completions for stop (running sessions)
-complete -c tmx -n "__tmx_using_command stop" -a "(__tmx_running_sessions)" -d "Running"
+# Dynamic completions for close (running sessions)
+complete -c tmx -n "__tmx_using_command close" -a "(__tmx_running_sessions)" -d "Running"
+complete -c tmx -n "__tmx_using_command c" -a "(__tmx_running_sessions)" -d "Running"
+
+# Dynamic completions for refresh (running sessions)
+complete -c tmx -n "__tmx_using_command refresh" -a "(__tmx_running_sessions)" -d "Running"
+complete -c tmx -n "__tmx_using_command r" -a "(__tmx_running_sessions)" -d "Running"
 
 # Shell options for completions command
 complete -c tmx -n "__tmx_using_command completions" -a "fish" -d "Fish shell"
+complete -c tmx -n "__tmx_using_command completions" -a "bash" -d "Bash shell"
+complete -c tmx -n "__tmx_using_command completions" -a "zsh" -d "Zsh shell"
 
 # Help options
 complete -c tmx -s h -l help -d "Show help message"
