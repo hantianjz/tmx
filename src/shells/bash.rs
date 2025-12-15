@@ -35,9 +35,9 @@ _tmx_completions() {{
             return 0
             ;;
         open|o)
-            # Suggest configured sessions
+            # Suggest configured + running sessions (deduplicated)
             if [[ $cword -eq 2 ]]; then
-                local sessions=$(tmx __list-configured 2>/dev/null)
+                local sessions=$( (tmx __list-configured 2>/dev/null; tmx __list-running 2>/dev/null) | sort -u )
                 COMPREPLY=($(compgen -W "$sessions" -- "$cur"))
             fi
             return 0

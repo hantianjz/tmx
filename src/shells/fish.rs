@@ -37,9 +37,17 @@ function __tmx_running_sessions
     tmx __list-running 2>/dev/null
 end
 
-# Dynamic completions for open (configured sessions)
-complete -c tmx -n "__tmx_using_command open" -a "(__tmx_configured_sessions)" -d "Session"
-complete -c tmx -n "__tmx_using_command o" -a "(__tmx_configured_sessions)" -d "Session"
+function __tmx_all_sessions
+    # Combine configured and running sessions, removing duplicates
+    begin
+        tmx __list-configured 2>/dev/null
+        tmx __list-running 2>/dev/null
+    end | sort -u
+end
+
+# Dynamic completions for open (configured + running sessions)
+complete -c tmx -n "__tmx_using_command open" -a "(__tmx_all_sessions)" -d "Session"
+complete -c tmx -n "__tmx_using_command o" -a "(__tmx_all_sessions)" -d "Session"
 
 # Dynamic completions for close (running sessions)
 complete -c tmx -n "__tmx_using_command close" -a "(__tmx_running_sessions)" -d "Running"

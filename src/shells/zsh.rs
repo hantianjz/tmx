@@ -24,6 +24,15 @@ _tmx_running_sessions() {{
     fi
 }}
 
+# Helper function to get all sessions (configured + running, deduplicated)
+_tmx_all_sessions() {{
+    local -a sessions
+    sessions=(${{(f)"$( (tmx __list-configured 2>/dev/null; tmx __list-running 2>/dev/null) | sort -u )"}})
+    if (( ${{#sessions}} > 0 )); then
+        _describe 'session' sessions
+    fi
+}}
+
 # Helper function to get available shells
 _tmx_shells() {{
     local -a shells
@@ -48,7 +57,7 @@ _tmx() {{
 
     case $line[1] in
         open|o)
-            _tmx_configured_sessions
+            _tmx_all_sessions
             ;;
         close|c)
             _tmx_running_sessions
