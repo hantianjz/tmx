@@ -9,29 +9,48 @@ pub fn run(ctx: &Context) -> Result<()> {
     // Get running sessions
     let running_sessions = tmux::list_sessions().unwrap_or_default();
 
-    println!("Configured sessions:");
-    let session_ids = config.session_ids();
-    if session_ids.is_empty() {
-        println!("  (none)");
-    } else {
-        for id in session_ids {
-            if let Some(session) = config.sessions.get(&id) {
-                let status = if running_sessions.contains(&session.name) {
-                    " (running)"
-                } else {
-                    ""
-                };
-                println!("  {}{}", id, status);
+    // Collect configured session names to filter from running list
+    let configured_session_names: std::collections::HashSet<_> = config
+        .sessions
+        .values()
+        .map(|s| s.name.clone())
+        .collect();
+
+    // Filter out configured sessions from running sessions
+    let other_running: Vec<_> = running_sessions
+        .iter()
+        .filter(|s| !configured_session_names.contains(*s))
+        .collect();
+
+    // Only show configured sessions if no sessions are running
+    if running_sessions.is_empty() {
+        println!("Configured sessions:");
+        let session_ids = config.session_ids();
+        if session_ids.is_empty() {
+            println!("  (none)");
+        } else {
+            for id in session_ids {
+                println!("  {}", id);
             }
         }
+        println!();
     }
 
-    println!();
-    println!("All running tmux sessions:");
+    println!("Running tmux sessions:");
     if running_sessions.is_empty() {
         println!("  (none)");
     } else {
-        for session in running_sessions {
+        // Show configured sessions that are running
+        let session_ids = config.session_ids();
+        for id in &session_ids {
+            if let Some(session) = config.sessions.get(id) {
+                if running_sessions.contains(&session.name) {
+                    println!("  {} (c)", id);
+                }
+            }
+        }
+        // Show other running sessions (not configured)
+        for session in other_running {
             println!("  {}", session);
         }
     }

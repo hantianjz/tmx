@@ -35,9 +35,17 @@ _tmx_completions() {{
             return 0
             ;;
         open|o)
-            # Suggest configured + running sessions (deduplicated)
+            # Suggest running sessions first, then configured-not-running
             if [[ $cword -eq 2 ]]; then
-                local sessions=$( (tmx __list-configured 2>/dev/null; tmx __list-running 2>/dev/null) | sort -u )
+                local running=$(tmx __list-running 2>/dev/null)
+                local configured=$(tmx __list-configured 2>/dev/null)
+                # Combine: running first, then configured that aren't running
+                local sessions="$running"
+                for s in $configured; do
+                    if ! echo "$running" | grep -qx "$s"; then
+                        sessions="$sessions $s"
+                    fi
+                done
                 COMPREPLY=($(compgen -W "$sessions" -- "$cur"))
             fi
             return 0

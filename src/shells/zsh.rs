@@ -24,12 +24,31 @@ _tmx_running_sessions() {{
     fi
 }}
 
-# Helper function to get all sessions (configured + running, deduplicated)
-_tmx_all_sessions() {{
-    local -a sessions
-    sessions=(${{(f)"$( (tmx __list-configured 2>/dev/null; tmx __list-running 2>/dev/null) | sort -u )"}})
-    if (( ${{#sessions}} > 0 )); then
-        _describe 'session' sessions
+# Helper function to get all sessions with status descriptions
+_tmx_open_sessions() {{
+    local -a running configured running_desc configured_desc
+    running=(${{(f)"$(tmx __list-running 2>/dev/null)"}})
+    configured=(${{(f)"$(tmx __list-configured 2>/dev/null)"}})
+
+    # Add running sessions with description
+    running_desc=()
+    for s in $running; do
+        running_desc+=("$s:Running")
+    done
+
+    # Add configured sessions that are not running
+    configured_desc=()
+    for s in $configured; do
+        if (( ! ${{running[(Ie)$s]}} )); then
+            configured_desc+=("$s:Configured")
+        fi
+    done
+
+    if (( ${{#running_desc}} > 0 )); then
+        _describe 'session' running_desc
+    fi
+    if (( ${{#configured_desc}} > 0 )); then
+        _describe 'session' configured_desc
     fi
 }}
 
@@ -57,7 +76,7 @@ _tmx() {{
 
     case $line[1] in
         open|o)
-            _tmx_all_sessions
+            _tmx_open_sessions
             ;;
         close|c)
             _tmx_running_sessions
