@@ -1,6 +1,8 @@
 use anyhow::{Context, Result};
 use std::process::{Command, Output};
 
+use crate::log;
+
 /// Format a tmux window target (session:window_index)
 fn window_target(session: &str, window_index: usize) -> String {
     format!("{}:{}", session, window_index)
@@ -309,6 +311,8 @@ pub fn kill_session(name: &str) -> Result<()> {
 
 /// Execute a tmux command
 fn execute_tmux(args: &[&str]) -> Result<Output> {
+    log::debug(&format!("tmux {}", args.join(" ")));
+
     let output = Command::new("tmux")
         .args(args)
         .output()
@@ -316,7 +320,13 @@ fn execute_tmux(args: &[&str]) -> Result<Output> {
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
+        log::error(&format!("tmux {} -> FAILED: {}", args.join(" "), stderr.trim()));
         anyhow::bail!("tmux command failed: {}", stderr.trim());
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    if !stdout.is_empty() {
+        log::debug(&format!("tmux {} -> {}", args.join(" "), stdout.trim()));
     }
 
     Ok(output)
@@ -324,12 +334,15 @@ fn execute_tmux(args: &[&str]) -> Result<Output> {
 
 /// Execute a tmux command interactively (for attach)
 fn execute_tmux_interactive(args: &[&str]) -> Result<()> {
+    log::debug(&format!("tmux {}", args.join(" ")));
+
     let status = Command::new("tmux")
         .args(args)
         .status()
         .context("Failed to execute tmux command")?;
 
     if !status.success() {
+        log::error(&format!("tmux {} -> exit status: {}", args.join(" "), status));
         anyhow::bail!("tmux command failed with status: {}", status);
     }
 

@@ -1,4 +1,5 @@
 use crate::context::Context as AppContext;
+use crate::log;
 use crate::session;
 use crate::tmux;
 use anyhow::{Context, Result};
@@ -15,13 +16,45 @@ use anyhow::{Context, Result};
 /// * `session_id` - The session name or ID from config
 /// * `ctx` - Shared context containing configuration and state
 pub fn run(session_id: &str, ctx: &AppContext) -> Result<()> {
+    log::info(&format!("refresh command: session_id={}", session_id));
+
     // Get config from context (lazy-loaded)
     let config = ctx.config()?;
 
-    // Find session in config
-    let session = config
-        .get_session(session_id)
-        .ok_or_else(|| anyhow::anyhow!("Session '{}' not found in configuration", session_id))?;
+    // Find session in config, or use default session's settings for unconfigured sessions
+    let session = if let Some(s) = config.get_session(session_id) {
+        log::info(&format!("found session '{}' in config", session_id));
+        s.clone()
+    } else {
+        // Session not in config - use default session's settings with the requested name
+        log::info(&format!("session '{}' not in config, using default layout", session_id));
+        let default_id = config.default.as_ref().ok_or_else(|| {
+            log::error(&format!("no default session configured for '{}'", session_id));
+            anyhow::anyhow!(
+                "Session '{}' not found and no default session configured",
+                session_id
+            )
+        })?;
+
+        let default_session = config.get_session(default_id).ok_or_else(|| {
+            log::error(&format!("default session '{}' not found", default_id));
+            anyhow::anyhow!(
+                "Default session '{}' not found in configuration",
+                default_id
+            )
+        })?;
+
+        // Clone the default session and change the name
+        let mut dynamic_session = default_session.clone();
+        dynamic_session.name = session_id.to_string();
+        // Use current working directory instead of the default session's root
+        let cwd = std::env::current_dir()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|_| "~".to_string());
+        dynamic_session.root = cwd.clone();
+        log::info(&format!("using default session '{}' as template with root '{}'", default_id, cwd));
+        dynamic_session
+    };
 
     let session_name = &session.name;
 

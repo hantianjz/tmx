@@ -1,4 +1,5 @@
 use crate::context::Context;
+use crate::log;
 use crate::session;
 use crate::tmux;
 use anyhow::Result;
@@ -24,14 +25,18 @@ fn attach_or_switch(session_name: &str, ctx: &Context) -> Result<()> {
 /// * `session_id` - The session ID/name to attach to or create
 /// * `ctx` - Shared context containing configuration and state
 pub fn run(session_id: &str, ctx: &Context) -> Result<()> {
+    log::info(&format!("open command: session_id={}", session_id));
+
     // Check if tmux is installed
     if !tmux::is_installed() {
+        log::error("tmux is not installed");
         anyhow::bail!("tmux is not installed");
     }
 
     // First, check if a session with this name already exists in tmux
     // This allows attaching to any existing session, even if not in config
     if tmux::has_session(session_id)? {
+        log::info(&format!("attaching to existing session '{}'", session_id));
         println!("Attaching to existing session '{}'...", session_id);
         return attach_or_switch(session_id, ctx);
     }
@@ -39,14 +44,41 @@ pub fn run(session_id: &str, ctx: &Context) -> Result<()> {
     // Session doesn't exist, so we need to create it from configuration
     let config = ctx.config()?;
 
-    // Find the session in config
-    let session = config.get_session(session_id).ok_or_else(|| {
-        anyhow::anyhow!(
-            "Session '{}' not found in configuration\nAvailable sessions: {}",
-            session_id,
-            config.session_ids().join(", ")
-        )
-    })?;
+    // Find the session in config, or use default session's layout for unconfigured sessions
+    let (session, is_dynamic) = if let Some(s) = config.get_session(session_id) {
+        log::info(&format!("found session '{}' in config", session_id));
+        (s.clone(), false)
+    } else {
+        // Session not in config - use default session's layout with the requested name
+        log::info(&format!("session '{}' not in config, using default layout", session_id));
+        let default_id = config.default.as_ref().ok_or_else(|| {
+            log::error(&format!("no default session configured for '{}'", session_id));
+            anyhow::anyhow!(
+                "Session '{}' not found and no default session configured\nAvailable sessions: {}",
+                session_id,
+                config.session_ids().join(", ")
+            )
+        })?;
+
+        let default_session = config.get_session(default_id).ok_or_else(|| {
+            log::error(&format!("default session '{}' not found", default_id));
+            anyhow::anyhow!(
+                "Default session '{}' not found in configuration",
+                default_id
+            )
+        })?;
+
+        // Clone the default session and change the name
+        let mut dynamic_session = default_session.clone();
+        dynamic_session.name = session_id.to_string();
+        // Use current working directory instead of the default session's root
+        let cwd = std::env::current_dir()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|_| "~".to_string());
+        dynamic_session.root = cwd.clone();
+        log::info(&format!("using default session '{}' as template with root '{}'", default_id, cwd));
+        (dynamic_session, true)
+    };
 
     let session_name = &session.name;
 
@@ -56,7 +88,10 @@ pub fn run(session_id: &str, ctx: &Context) -> Result<()> {
         attach_or_switch(session_name, ctx)?;
     } else {
         // Create the session
-        session::create_session(session, ctx)?;
+        if is_dynamic {
+            println!("Creating session '{}' using default layout...", session_name);
+        }
+        session::create_session(&session, ctx)?;
         // Attach to the newly created session
         attach_or_switch(session_name, ctx)?;
     }

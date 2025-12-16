@@ -2,6 +2,7 @@ mod cli;
 mod commands;
 mod config;
 mod context;
+mod log;
 mod session;
 mod shells;
 mod tmux;
@@ -12,14 +13,21 @@ use cli::{Cli, Commands};
 use context::Context;
 
 fn main() {
-    if let Err(e) = run() {
+    // Parse CLI first to get verbose flag
+    let cli = Cli::parse();
+
+    // Initialize logging to ~/.cache/tmx/tmx.log
+    // Pass verbose flag to enable debug level logging
+    log::init(cli.verbose);
+
+    if let Err(e) = run(cli) {
+        log::error(&format!("{}", e));
         eprintln!("Error: {}", e);
         std::process::exit(1);
     }
 }
 
-fn run() -> Result<()> {
-    let cli = Cli::parse();
+fn run(cli: Cli) -> Result<()> {
 
     // Create context once with all CLI arguments and env vars
     let ctx = Context::new(cli.config, cli.verbose)?;
