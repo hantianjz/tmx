@@ -2,6 +2,8 @@ use crate::config::Session;
 use crate::context::Context;
 use crate::tmux;
 use anyhow::Result;
+use std::thread;
+use std::time::Duration;
 
 /// Create a new tmux session from a configuration.
 ///
@@ -65,6 +67,10 @@ pub fn create_session(session: &Session, ctx: &Context) -> Result<()> {
 
             // Always apply layout and sizes
             apply_window_layout(session_name, window_index, window, verbose)?;
+
+            // Wait for panes to initialize before sending commands
+            // This prevents issues where vim/neovim gets incorrect dimensions
+            thread::sleep(Duration::from_millis(500));
         }
 
         // Send commands to all panes in this window

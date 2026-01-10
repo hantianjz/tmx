@@ -81,15 +81,24 @@ pub fn run(session_id: &str, ctx: &Context) -> Result<()> {
     };
 
     let session_name = &session.name;
+    let sanitized_name = tmux::sanitize_session_name(session_name);
+
+    // Warn user if session name contains special characters
+    if sanitized_name != *session_name {
+        println!(
+            "Note: Session name '{}' contains special characters and will be created as '{}'",
+            session_name, sanitized_name
+        );
+    }
 
     // Double-check if session exists with the configured name (may differ from session_id)
     if tmux::has_session(session_name)? {
-        println!("Attaching to existing session '{}'...", session_name);
+        println!("Attaching to existing session '{}'...", sanitized_name);
         attach_or_switch(session_name, ctx)?;
     } else {
         // Create the session
         if is_dynamic {
-            println!("Creating session '{}' using default layout...", session_name);
+            println!("Creating session '{}' using default layout...", sanitized_name);
         }
         session::create_session(&session, ctx)?;
         // Attach to the newly created session

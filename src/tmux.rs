@@ -5,12 +5,37 @@ use crate::log;
 
 /// Format a tmux window target (session:window_index)
 fn window_target(session: &str, window_index: usize) -> String {
-    format!("{}:{}", session, window_index)
+    let sanitized = sanitize_session_name(session);
+    format!("{}:{}", sanitized, window_index)
 }
 
 /// Format a tmux pane target (session:window_index.pane_index)
 fn pane_target(session: &str, window_index: usize, pane_index: usize) -> String {
-    format!("{}:{}.{}", session, window_index, pane_index)
+    let sanitized = sanitize_session_name(session);
+    format!("{}:{}.{}", sanitized, window_index, pane_index)
+}
+
+/// Sanitize a session name to be compatible with tmux.
+///
+/// Tmux replaces certain special characters (like dots and colons) with underscores
+/// because they're used as separators in target notation (session:window.pane).
+/// This function replicates that behavior to ensure consistency.
+///
+/// # Arguments
+/// * `name` - The original session name
+///
+/// # Returns
+/// The sanitized session name with special characters replaced by underscores
+pub fn sanitize_session_name(name: &str) -> String {
+    name.chars()
+        .map(|c| match c {
+            // Tmux uses these as separators, so they must be replaced
+            '.' | ':' => '_',
+            // Also replace other potentially problematic characters
+            ' ' | '\t' | '\n' => '_',
+            _ => c,
+        })
+        .collect()
 }
 
 /// Check if tmux is currently installed and available in PATH.
@@ -62,8 +87,9 @@ pub fn get_base_index() -> Result<usize> {
 /// # Returns
 /// `Ok(true)` if the session exists, `Ok(false)` if it doesn't, or an error.
 pub fn has_session(name: &str) -> Result<bool> {
+    let sanitized = sanitize_session_name(name);
     let output = Command::new("tmux")
-        .args(["has-session", "-t", name])
+        .args(["has-session", "-t", &sanitized])
         .output()
         .context("Failed to check session existence")?;
 
@@ -152,7 +178,8 @@ pub fn get_window_dimensions(session: &str, window_index: usize) -> Result<(usiz
 
 /// Create a new tmux session
 pub fn new_session(name: &str, window_name: &str, root: Option<&str>) -> Result<()> {
-    let mut args = vec!["new-session", "-d", "-s", name, "-n", window_name];
+    let sanitized = sanitize_session_name(name);
+    let mut args = vec!["new-session", "-d", "-s", &sanitized, "-n", window_name];
 
     if let Some(dir) = root {
         args.push("-c");
@@ -165,7 +192,8 @@ pub fn new_session(name: &str, window_name: &str, root: Option<&str>) -> Result<
 
 /// Create a new window in a session
 pub fn new_window(session: &str, window_name: &str, root: Option<&str>) -> Result<()> {
-    let target = format!("{}:", session);
+    let sanitized = sanitize_session_name(session);
+    let target = format!("{}:", sanitized);
     let mut args = vec!["new-window", "-t", &target, "-n", window_name];
 
     if let Some(dir) = root {
@@ -293,19 +321,22 @@ pub fn select_pane(session: &str, window_index: usize, pane_index: usize) -> Res
 
 /// Attach to a session
 pub fn attach_session(name: &str) -> Result<()> {
-    execute_tmux_interactive(&["attach-session", "-t", name])?;
+    let sanitized = sanitize_session_name(name);
+    execute_tmux_interactive(&["attach-session", "-t", &sanitized])?;
     Ok(())
 }
 
 /// Switch to a session (when already inside tmux)
 pub fn switch_client(name: &str) -> Result<()> {
-    execute_tmux(&["switch-client", "-t", name])?;
+    let sanitized = sanitize_session_name(name);
+    execute_tmux(&["switch-client", "-t", &sanitized])?;
     Ok(())
 }
 
 /// Kill a session
 pub fn kill_session(name: &str) -> Result<()> {
-    execute_tmux(&["kill-session", "-t", name])?;
+    let sanitized = sanitize_session_name(name);
+    execute_tmux(&["kill-session", "-t", &sanitized])?;
     Ok(())
 }
 
