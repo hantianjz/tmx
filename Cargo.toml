@@ -11,9 +11,14 @@ repository = "https://github.com/hjz/fishmux"
 name = "tmx"
 path = "src/main.rs"
 
+[[bin]]
+name = "hmx"
+path = "src/hmx.rs"
+
 [dependencies]
 clap = { version = "4.5", features = ["derive", "cargo"] }
 serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 toml = "0.9"
 anyhow = "1.0"
 shellexpand = "3.1"

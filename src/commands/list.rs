@@ -10,11 +10,8 @@ pub fn run(ctx: &Context) -> Result<()> {
     let running_sessions = tmux::list_sessions().unwrap_or_default();
 
     // Collect configured session names to filter from running list
-    let configured_session_names: std::collections::HashSet<_> = config
-        .sessions
-        .values()
-        .map(|s| s.name.clone())
-        .collect();
+    let configured_session_names: std::collections::HashSet<_> =
+        config.sessions.values().map(|s| s.name.clone()).collect();
 
     // Filter out configured sessions from running sessions
     let other_running: Vec<_> = running_sessions
@@ -43,10 +40,10 @@ pub fn run(ctx: &Context) -> Result<()> {
         // Show configured sessions that are running
         let session_ids = config.session_ids();
         for id in &session_ids {
-            if let Some(session) = config.sessions.get(id) {
-                if running_sessions.contains(&session.name) {
-                    println!("  {} (c)", id);
-                }
+            if let Some(session) = config.sessions.get(id)
+                && running_sessions.contains(&session.name)
+            {
+                println!("  {} (c)", id);
             }
         }
         // Show other running sessions (not configured)

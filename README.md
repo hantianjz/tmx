@@ -1,10 +1,11 @@
-# TMX
+# TMX and HMX
 
-A tmux session manager with declarative TOML configuration, written in Rust.
+Declarative tmux session and Herdr workspace managers sharing one TOML configuration.
 
 ## Features
 
 - Create and manage tmux sessions from TOML configuration files
+- Create and manage Herdr workspaces from the same configuration
 - Define multiple windows with custom panes and layouts
 - Execute commands in specific panes on session creation
 - Set environment variables per pane
@@ -19,6 +20,7 @@ A tmux session manager with declarative TOML configuration, written in Rust.
 
 - [Rust](https://rustup.rs/) (for building)
 - [tmux](https://github.com/tmux/tmux) 2.0+
+- [Herdr](https://herdr.dev/docs/install/) for `hmx` (also required remotely)
 
 ### Building from Source
 
@@ -28,7 +30,7 @@ cd fishmux
 cargo build --release
 ```
 
-The binary will be at `target/release/tmx`.
+The binaries will be at `target/release/tmx` and `target/release/hmx`.
 
 ### Installing
 
@@ -37,7 +39,7 @@ The binary will be at `target/release/tmx`.
 cargo install --path .
 
 # Option 2: Copy manually
-cp target/release/tmx ~/.local/bin/
+cp target/release/{tmx,hmx} ~/.local/bin/
 # or
 sudo cp target/release/tmx /usr/local/bin/
 ```
@@ -96,6 +98,60 @@ tmx --config ./project.toml start dev
 ### Configuration
 
 Configuration file location: `~/.config/tmx/tmx.toml`
+
+## Herdr workspace management
+
+`hmx` maps configured sessions to Herdr workspaces, windows to tabs, and
+panes to panes. It preserves commands, working directories, and environment
+variables. The `[sessions.*]` spelling remains unchanged so `tmx` and `hmx`
+can share the file.
+
+```bash
+hmx                         # Attach, or cycle when already inside Herdr
+hmx open dev                # Create/focus a workspace and attach
+hmx close dev               # Close a running workspace
+hmx refresh dev             # Add missing tabs and panes
+hmx list                    # List configured and running workspaces
+hmx validate
+hmx completions fish
+
+hmx --session agents open dev
+hmx --remote workbox open dev
+hmx --remote workbox --session agents open dev
+```
+
+`hmx open <name>` first focuses an already-running workspace whose label
+exactly matches `<name>`, even when the configuration is missing or invalid.
+Otherwise, `<name>` may be a configured key or workspace name. An unknown name
+creates a dynamic workspace by cloning the configured default layout and
+renaming it. Dynamic local workspaces use the caller's current directory as
+their root; dynamic remote workspaces use the remote account's home directory.
+
+Bare `hmx` cycles through running workspaces without requiring configuration.
+When configuration is available, configured workspaces come first; if it is
+missing or invalid, live workspace labels are ordered alphabetically.
+
+`--remote` reads the configuration locally, expands `~` from the remote home
+directory, manages the remote Herdr server over SSH, and attaches through the
+local Herdr client. `hmx` is not needed remotely, but Herdr must be installed.
+Remote targets are rejected from inside an existing Herdr client.
+
+For `hmx`, configuration path precedence is `--config`, `HMX_CONFIG_PATH`,
+`TMX_CONFIG_PATH`, then `~/.config/tmx/tmx.toml`.
+
+Layout conversion is best effort: horizontal and vertical splits become
+right and down splits, percentage sizes become ratios, and absolute cell
+sizes are ignored with a warning. Refresh preserves extra tabs, panes, and
+existing processes. It matches configured windows to Herdr tabs by position,
+not their current labels, so Herdr's automatic tab renaming does not create
+duplicates. Refreshing an unconfigured running workspace uses the default
+layout.
+
+```bash
+hmx completions bash > ~/.local/share/bash-completion/completions/hmx
+hmx completions fish > ~/.config/fish/completions/hmx.fish
+hmx completions zsh > ~/.local/share/zsh/site-functions/_hmx
+```
 
 #### Basic Example
 

@@ -16,7 +16,10 @@ impl std::str::FromStr for Shell {
             "fish" => Ok(Shell::Fish),
             "bash" => Ok(Shell::Bash),
             "zsh" => Ok(Shell::Zsh),
-            _ => anyhow::bail!("Unsupported shell: {}. Supported shells: fish, bash, zsh", s),
+            _ => anyhow::bail!(
+                "Unsupported shell: {}. Supported shells: fish, bash, zsh",
+                s
+            ),
         }
     }
 }

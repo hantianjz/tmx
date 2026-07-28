@@ -168,9 +168,11 @@ pub fn get_window_dimensions(session: &str, window_index: usize) -> Result<(usiz
         anyhow::bail!("Failed to parse window dimensions: {}", stdout);
     }
 
-    let width = parts[0].parse::<usize>()
+    let width = parts[0]
+        .parse::<usize>()
         .context("Failed to parse window width")?;
-    let height = parts[1].parse::<usize>()
+    let height = parts[1]
+        .parse::<usize>()
         .context("Failed to parse window height")?;
 
     Ok((width, height))
@@ -351,7 +353,11 @@ fn execute_tmux(args: &[&str]) -> Result<Output> {
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        log::error(&format!("tmux {} -> FAILED: {}", args.join(" "), stderr.trim()));
+        log::error(&format!(
+            "tmux {} -> FAILED: {}",
+            args.join(" "),
+            stderr.trim()
+        ));
         anyhow::bail!("tmux command failed: {}", stderr.trim());
     }
 
@@ -373,7 +379,11 @@ fn execute_tmux_interactive(args: &[&str]) -> Result<()> {
         .context("Failed to execute tmux command")?;
 
     if !status.success() {
-        log::error(&format!("tmux {} -> exit status: {}", args.join(" "), status));
+        log::error(&format!(
+            "tmux {} -> exit status: {}",
+            args.join(" "),
+            status
+        ));
         anyhow::bail!("tmux command failed with status: {}", status);
     }
 

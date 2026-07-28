@@ -1,6 +1,6 @@
+use crate::config::Config;
 use crate::context::Context as AppContext;
 use crate::tmux;
-use crate::{commands::refresh, config::Config};
 use anyhow::{Context, Result};
 
 /// Cycle through running tmux sessions, or start the first configured session if none are running.
@@ -55,7 +55,9 @@ pub fn run(ctx: &AppContext) -> Result<()> {
     // If inside tmux, get current session and switch to next
     if ctx.is_inside_tmux {
         let current = tmux::get_current_session()?;
-        return refresh::run(&current, ctx);
+        let next = next_session(&ordered_sessions, Some(&current));
+        println!("Switching to session '{}'...", next);
+        return tmux::switch_client(next);
     }
 
     // Not in tmux, attach to first session
@@ -100,4 +102,25 @@ fn order_sessions(running: &[String], config: Option<&Config>) -> Vec<String> {
     }
 
     result
+}
+
+fn next_session<'a>(ordered: &'a [String], current: Option<&str>) -> &'a str {
+    let index = current
+        .and_then(|name| ordered.iter().position(|candidate| candidate == name))
+        .map(|index| (index + 1) % ordered.len())
+        .unwrap_or(0);
+    &ordered[index]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::next_session;
+
+    #[test]
+    fn next_session_cycles_and_wraps() {
+        let sessions = vec!["a".to_string(), "b".to_string(), "c".to_string()];
+        assert_eq!(next_session(&sessions, Some("a")), "b");
+        assert_eq!(next_session(&sessions, Some("c")), "a");
+        assert_eq!(next_session(&sessions, Some("missing")), "a");
+    }
 }

@@ -60,7 +60,7 @@ pub fn create_session(session: &Session, ctx: &Context) -> Result<()> {
                 window_index,
                 window,
                 &window_root,
-                1, // Start at index 1 (first pane already exists)
+                1,     // Start at index 1 (first pane already exists)
                 false, // Don't apply sizes here - let apply_window_layout handle it
                 verbose,
             )?;
@@ -189,7 +189,8 @@ pub fn apply_window_layout(
         tmux::select_layout(session_name, window_index, layout, verbose)?;
 
         // Get window dimensions for calculating percentage-based sizes
-        let (window_width, window_height) = tmux::get_window_dimensions(session_name, window_index)?;
+        let (window_width, window_height) =
+            tmux::get_window_dimensions(session_name, window_index)?;
 
         // Then apply custom pane sizes (which override the layout)
         for (pane_idx, pane) in window.panes.iter().enumerate() {
@@ -199,16 +200,22 @@ pub fn apply_window_layout(
 
                 // Calculate absolute size from percentage or use as-is
                 let absolute_size = if size_spec.ends_with('%') {
-                    let percentage = size_spec.trim_end_matches('%')
+                    let percentage = size_spec
+                        .trim_end_matches('%')
                         .parse::<f64>()
                         .map_err(|_| anyhow::anyhow!("Invalid percentage: {}", size_spec))?;
 
                     // Calculate based on the dimension we're resizing
-                    let dimension = if is_horizontal { window_width } else { window_height };
+                    let dimension = if is_horizontal {
+                        window_width
+                    } else {
+                        window_height
+                    };
                     ((dimension as f64) * (percentage / 100.0)) as usize
                 } else {
                     // Absolute size
-                    size_spec.parse::<usize>()
+                    size_spec
+                        .parse::<usize>()
                         .map_err(|_| anyhow::anyhow!("Invalid size: {}", size_spec))?
                 };
 

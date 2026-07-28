@@ -1,8 +1,8 @@
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::SystemTime;
 
 use once_cell::sync::Lazy;
@@ -19,8 +19,8 @@ fn log_dir() -> Option<PathBuf> {
 }
 
 /// Get the log file path (~/.cache/tmx/tmx.log)
-fn log_path() -> Option<PathBuf> {
-    log_dir().map(|p| p.join("tmx.log"))
+fn log_path(name: &str) -> Option<PathBuf> {
+    log_dir().map(|p| p.join(format!("{name}.log")))
 }
 
 /// Initialize the logger, creating the log directory if needed.
@@ -29,6 +29,10 @@ fn log_path() -> Option<PathBuf> {
 /// # Arguments
 /// * `verbose` - If true, enables debug level logging
 pub fn init(verbose: bool) {
+    init_for("tmx", verbose);
+}
+
+pub fn init_for(name: &str, verbose: bool) {
     // Set debug mode
     DEBUG_MODE.store(verbose, Ordering::SeqCst);
 
@@ -42,7 +46,7 @@ pub fn init(verbose: bool) {
         return;
     }
 
-    let Some(path) = log_path() else {
+    let Some(path) = log_path(name) else {
         return;
     };
 
@@ -53,7 +57,10 @@ pub fn init(verbose: bool) {
             *guard = Some(file);
             drop(guard);
             let mode = if verbose { "debug" } else { "info" };
-            log(&format!("--- tmx session started (log level: {}) ---", mode));
+            log(&format!(
+                "--- {} session started (log level: {}) ---",
+                name, mode
+            ));
         }
         Err(e) => {
             eprintln!("Warning: Could not open log file: {}", e);
@@ -156,4 +163,3 @@ pub fn info(message: &str) {
 pub fn error(message: &str) {
     log(&format!("[ERROR] {}", message));
 }
-

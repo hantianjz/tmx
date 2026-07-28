@@ -28,7 +28,6 @@ fn main() {
 }
 
 fn run(cli: Cli) -> Result<()> {
-
     // Create context once with all CLI arguments and env vars
     let ctx = Context::new(cli.config, cli.verbose)?;
 

@@ -45,13 +45,17 @@ pub fn run(session_id: &str, ctx: &Context) -> Result<()> {
     let config = ctx.config()?;
 
     // Find the session in config, or use default session's layout for unconfigured sessions
-    let (session, is_dynamic) = if let Some(s) = config.get_session(session_id) {
-        log::info(&format!("found session '{}' in config", session_id));
-        (s.clone(), false)
-    } else {
-        // Session not in config - use default session's layout with the requested name
-        log::info(&format!("session '{}' not in config, using default layout", session_id));
-        let default_id = config.default.as_ref().ok_or_else(|| {
+    let (session, is_dynamic) =
+        if let Some(s) = config.get_session(session_id) {
+            log::info(&format!("found session '{}' in config", session_id));
+            (s.clone(), false)
+        } else {
+            // Session not in config - use default session's layout with the requested name
+            log::info(&format!(
+                "session '{}' not in config, using default layout",
+                session_id
+            ));
+            let default_id = config.default.as_ref().ok_or_else(|| {
             log::error(&format!("no default session configured for '{}'", session_id));
             anyhow::anyhow!(
                 "Session '{}' not found and no default session configured\nAvailable sessions: {}",
@@ -60,25 +64,28 @@ pub fn run(session_id: &str, ctx: &Context) -> Result<()> {
             )
         })?;
 
-        let default_session = config.get_session(default_id).ok_or_else(|| {
-            log::error(&format!("default session '{}' not found", default_id));
-            anyhow::anyhow!(
-                "Default session '{}' not found in configuration",
-                default_id
-            )
-        })?;
+            let default_session = config.get_session(default_id).ok_or_else(|| {
+                log::error(&format!("default session '{}' not found", default_id));
+                anyhow::anyhow!(
+                    "Default session '{}' not found in configuration",
+                    default_id
+                )
+            })?;
 
-        // Clone the default session and change the name
-        let mut dynamic_session = default_session.clone();
-        dynamic_session.name = session_id.to_string();
-        // Use current working directory instead of the default session's root
-        let cwd = std::env::current_dir()
-            .map(|p| p.to_string_lossy().to_string())
-            .unwrap_or_else(|_| "~".to_string());
-        dynamic_session.root = cwd.clone();
-        log::info(&format!("using default session '{}' as template with root '{}'", default_id, cwd));
-        (dynamic_session, true)
-    };
+            // Clone the default session and change the name
+            let mut dynamic_session = default_session.clone();
+            dynamic_session.name = session_id.to_string();
+            // Use current working directory instead of the default session's root
+            let cwd = std::env::current_dir()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|_| "~".to_string());
+            dynamic_session.root = cwd.clone();
+            log::info(&format!(
+                "using default session '{}' as template with root '{}'",
+                default_id, cwd
+            ));
+            (dynamic_session, true)
+        };
 
     let session_name = &session.name;
     let sanitized_name = tmux::sanitize_session_name(session_name);
@@ -98,7 +105,10 @@ pub fn run(session_id: &str, ctx: &Context) -> Result<()> {
     } else {
         // Create the session
         if is_dynamic {
-            println!("Creating session '{}' using default layout...", sanitized_name);
+            println!(
+                "Creating session '{}' using default layout...",
+                sanitized_name
+            );
         }
         session::create_session(&session, ctx)?;
         // Attach to the newly created session

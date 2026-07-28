@@ -232,22 +232,22 @@ impl Session {
         }
 
         // Validate startup_window if specified
-        if let Some(StartupWindow::Index(i)) = &self.startup_window {
-            if *i >= self.windows.len() {
-                return Err(startup_window_index_error(
-                    &self.name,
-                    *i,
-                    self.windows.len() - 1,
-                    self.windows.len(),
-                ));
-            }
+        if let Some(StartupWindow::Index(i)) = &self.startup_window
+            && *i >= self.windows.len()
+        {
+            return Err(startup_window_index_error(
+                &self.name,
+                *i,
+                self.windows.len() - 1,
+                self.windows.len(),
+            ));
         }
 
-        if let Some(StartupWindow::Name(name)) = &self.startup_window {
-            if !self.windows.iter().any(|w| &w.name == name) {
-                let available: Vec<_> = self.windows.iter().map(|w| w.name.as_str()).collect();
-                return Err(startup_window_name_error(&self.name, name, &available));
-            }
+        if let Some(StartupWindow::Name(name)) = &self.startup_window
+            && !self.windows.iter().any(|w| &w.name == name)
+        {
+            let available: Vec<_> = self.windows.iter().map(|w| w.name.as_str()).collect();
+            return Err(startup_window_name_error(&self.name, name, &available));
         }
 
         for (i, window) in self.windows.iter().enumerate() {
@@ -287,22 +287,23 @@ impl Window {
         }
 
         // Validate layout if specified
-        if let Some(ref layout) = self.layout {
-            if !Self::VALID_LAYOUTS.contains(&layout.as_str()) {
-                return Err(invalid_layout_error(
-                    &self.name,
-                    layout,
-                    Self::VALID_LAYOUTS,
-                ));
-            }
+        if let Some(ref layout) = self.layout
+            && !Self::VALID_LAYOUTS.contains(&layout.as_str())
+        {
+            return Err(invalid_layout_error(
+                &self.name,
+                layout,
+                Self::VALID_LAYOUTS,
+            ));
         }
 
         // Validate pane split directions
         for (i, pane) in self.panes.iter().enumerate() {
-            if let Some(ref split) = pane.split {
-                if split != "horizontal" && split != "vertical" {
-                    return Err(invalid_split_error(i, &self.name, split));
-                }
+            if let Some(ref split) = pane.split
+                && split != "horizontal"
+                && split != "vertical"
+            {
+                return Err(invalid_split_error(i, &self.name, split));
             }
 
             // Validate pane size format if specified

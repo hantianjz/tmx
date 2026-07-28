@@ -27,9 +27,15 @@ pub fn run(session_id: &str, ctx: &AppContext) -> Result<()> {
         s.clone()
     } else {
         // Session not in config - use default session's settings with the requested name
-        log::info(&format!("session '{}' not in config, using default layout", session_id));
+        log::info(&format!(
+            "session '{}' not in config, using default layout",
+            session_id
+        ));
         let default_id = config.default.as_ref().ok_or_else(|| {
-            log::error(&format!("no default session configured for '{}'", session_id));
+            log::error(&format!(
+                "no default session configured for '{}'",
+                session_id
+            ));
             anyhow::anyhow!(
                 "Session '{}' not found and no default session configured",
                 session_id
@@ -52,7 +58,10 @@ pub fn run(session_id: &str, ctx: &AppContext) -> Result<()> {
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_else(|_| "~".to_string());
         dynamic_session.root = cwd.clone();
-        log::info(&format!("using default session '{}' as template with root '{}'", default_id, cwd));
+        log::info(&format!(
+            "using default session '{}' as template with root '{}'",
+            default_id, cwd
+        ));
         dynamic_session
     };
 
