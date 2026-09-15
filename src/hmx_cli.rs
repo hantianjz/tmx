@@ -45,10 +45,21 @@ pub enum Commands {
     Init,
     /// Validate the shared configuration
     Validate,
+    /// Manage configured Herdr machines
+    Machines {
+        #[command(subcommand)]
+        command: MachineCommands,
+    },
     /// Generate shell completions
     Completions { shell: String },
     #[command(name = "__list-configured", hide = true)]
     ListConfigured,
     #[command(name = "__list-running", hide = true)]
     ListRunning,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum MachineCommands {
+    /// Register configured remote sessions alongside Local
+    Sync,
 }

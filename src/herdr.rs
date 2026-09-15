@@ -1,5 +1,6 @@
-use crate::config::{Config, Session, Window};
+use crate::config::{Config, Machine, Session, Window};
 use anyhow::{Context, Result, bail};
+use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::process::{Command, Output, Stdio};
@@ -78,6 +79,91 @@ pub struct Client<R> {
     verbose: bool,
 }
 
+#[derive(Debug, Deserialize)]
+#[cfg_attr(test, derive(Clone, PartialEq, Eq, serde::Serialize))]
+struct SavedMachine {
+    id: String,
+    label: String,
+    target: String,
+    session: String,
+    enabled: bool,
+}
+
+enum MachineAction {
+    Add {
+        label: String,
+        remote: String,
+        session: String,
+    },
+    Rename {
+        id: String,
+        label: String,
+    },
+    Enable {
+        id: String,
+    },
+}
+
+fn machine_actions(
+    machines: &HashMap<String, Machine>,
+    saved: &[SavedMachine],
+) -> Result<Vec<MachineAction>> {
+    let mut labels: Vec<_> = machines.keys().collect();
+    labels.sort_unstable();
+    let mut actions = Vec::new();
+    for label in labels {
+        let machine = &machines[label];
+        let mut matches = saved
+            .iter()
+            .filter(|entry| entry.target == machine.remote && entry.session == machine.session);
+        let entry = matches.next();
+        if let (Some(first), Some(second)) = (entry, matches.next()) {
+            bail!(
+                "machines.{label}: ambiguous saved connection {}/{}; profile IDs: {}. Remove duplicate profiles explicitly using Herdr before retrying",
+                machine.remote,
+                machine.session,
+                std::iter::once(first)
+                    .chain(std::iter::once(second))
+                    .chain(matches)
+                    .map(|entry| entry.id.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+        }
+        if let Some(conflict) = saved.iter().find(|entry| {
+            entry.label == *label
+                && (entry.target != machine.remote || entry.session != machine.session)
+        }) {
+            bail!(
+                "machines.{label}: label is already used by profile {} for {}/{}. Rename/remove that profile explicitly using Herdr before retrying",
+                conflict.id,
+                conflict.target,
+                conflict.session
+            );
+        }
+        if let Some(entry) = entry {
+            if entry.label != *label {
+                actions.push(MachineAction::Rename {
+                    id: entry.id.clone(),
+                    label: label.clone(),
+                });
+            }
+            if !entry.enabled {
+                actions.push(MachineAction::Enable {
+                    id: entry.id.clone(),
+                });
+            }
+        } else {
+            actions.push(MachineAction::Add {
+                label: label.clone(),
+                remote: machine.remote.clone(),
+                session: machine.session.clone(),
+            });
+        }
+    }
+    Ok(actions)
+}
+
 impl<R: Runner> Client<R> {
     pub fn new(runner: R, remote: Option<String>, session: Option<String>, verbose: bool) -> Self {
         Self {
@@ -90,6 +176,86 @@ impl<R: Runner> Client<R> {
 
     pub fn is_remote(&self) -> bool {
         self.remote.is_some()
+    }
+
+    /// Reconcile configured connections against the local Herdr machine catalog.
+    pub fn sync_machines(&self, machines: &HashMap<String, Machine>) -> Result<()> {
+        if self.remote.is_some() || self.session.is_some() {
+            bail!("machines sync manages the local machine catalog; omit --remote and --session");
+        }
+        if machines.is_empty() {
+            println!("No machines configured");
+            return Ok(());
+        }
+        let args = vec!["machine".into(), "list".into(), "--json".into()];
+        self.trace("herdr", &args);
+        let output = self.runner.output("herdr", &args)
+            .map_err(|error| anyhow::anyhow!("Failed to read the local Herdr machine catalog; use a Herdr version supporting machine commands: {error:#}"))?;
+        if !output.status.success() {
+            bail!(
+                "Herdr machine list failed ({}): {}. Use a Herdr version supporting machine commands",
+                output.status,
+                String::from_utf8_lossy(&output.stderr).trim()
+            );
+        }
+        let saved: Vec<SavedMachine> = serde_json::from_slice(&output.stdout).map_err(|error| {
+            anyhow::anyhow!(
+                "Invalid Herdr machine-list JSON; use a compatible Herdr version: {error}"
+            )
+        })?;
+        for action in machine_actions(machines, &saved)? {
+            let (args, context) = match action {
+                MachineAction::Add {
+                    label,
+                    remote,
+                    session,
+                } => {
+                    let context = format!("Failed to add machines.{label} ({remote}/{session})");
+                    (
+                        vec![
+                            "machine".into(),
+                            "add".into(),
+                            remote,
+                            "--label".into(),
+                            label,
+                            "--remote-session".into(),
+                            session,
+                        ],
+                        context,
+                    )
+                }
+                MachineAction::Rename { id, label } => {
+                    let context = format!("Failed to rename profile {id} to machines.{label}");
+                    (
+                        vec![
+                            "machine".into(),
+                            "rename".into(),
+                            id,
+                            "--label".into(),
+                            label,
+                        ],
+                        context,
+                    )
+                }
+                MachineAction::Enable { id } => {
+                    let entry = saved
+                        .iter()
+                        .find(|entry| entry.id == id)
+                        .expect("planned profile exists in the catalog snapshot");
+                    let context = format!(
+                        "Failed to enable profile {id} ({}/{})",
+                        entry.target, entry.session
+                    );
+                    (vec!["machine".into(), "enable".into(), id], context)
+                }
+            };
+            self.trace("herdr", &args);
+            self.runner
+                .status("herdr", &args)
+                .map_err(|error| anyhow::anyhow!("{context}: {error:#}"))?;
+        }
+        println!("Configured machines are synced. Open herdr or use your existing local client.");
+        Ok(())
     }
 
     fn herdr_args(&self, command: &[&str]) -> Vec<String> {
@@ -790,6 +956,251 @@ mod tests {
             status: std::process::ExitStatus::from_raw(code << 8),
             stdout: stdout.as_bytes().to_vec(),
             stderr: stderr.as_bytes().to_vec(),
+        }
+    }
+
+    #[derive(Default)]
+    struct CatalogRunner {
+        reads: std::cell::Cell<usize>,
+        catalog: std::cell::RefCell<Vec<SavedMachine>>,
+        preparations: std::cell::Cell<usize>,
+        list_failure: std::cell::RefCell<Option<Output>>,
+        fail_label: std::cell::RefCell<Option<String>>,
+    }
+
+    impl Runner for CatalogRunner {
+        fn output(&self, program: &str, args: &[String]) -> Result<Output> {
+            assert_eq!(program, "herdr");
+            self.reads.set(self.reads.get() + 1);
+            assert_eq!(args, &["machine", "list", "--json"]);
+            Ok(self.list_failure.borrow_mut().take().unwrap_or_else(|| {
+                output(
+                    0,
+                    &serde_json::to_string(&*self.catalog.borrow()).unwrap(),
+                    "",
+                )
+            }))
+        }
+
+        fn status(&self, program: &str, args: &[String]) -> Result<()> {
+            assert_eq!(program, "herdr");
+            let mut catalog = self.catalog.borrow_mut();
+            match args
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>()
+                .as_slice()
+            {
+                [
+                    "machine",
+                    "add",
+                    target,
+                    "--label",
+                    label,
+                    "--remote-session",
+                    session,
+                ] => {
+                    self.preparations.set(self.preparations.get() + 1);
+                    if self.fail_label.borrow().as_deref() == Some(*label) {
+                        bail!("remote setup declined");
+                    }
+                    let id = format!("profile-{}", self.preparations.get());
+                    catalog.push(SavedMachine {
+                        id,
+                        label: (*label).into(),
+                        target: (*target).into(),
+                        session: (*session).into(),
+                        enabled: true,
+                    });
+                }
+                ["machine", "rename", id, "--label", label] => {
+                    catalog
+                        .iter_mut()
+                        .find(|entry| entry.id == *id)
+                        .unwrap()
+                        .label = (*label).into();
+                }
+                ["machine", "enable", id] => {
+                    catalog
+                        .iter_mut()
+                        .find(|entry| entry.id == *id)
+                        .unwrap()
+                        .enabled = true;
+                }
+                _ => panic!("unexpected catalog mutation: {args:?}"),
+            }
+            Ok(())
+        }
+
+        fn start_server(&self, _: &str, _: &[String]) -> Result<()> {
+            panic!("sync must not start a local server")
+        }
+    }
+
+    fn machines(labels: &[&str]) -> HashMap<String, Machine> {
+        labels
+            .iter()
+            .map(|label| {
+                (
+                    (*label).into(),
+                    Machine {
+                        remote: "hjz@172.16.2.2".into(),
+                        session: (*label).into(),
+                    },
+                )
+            })
+            .collect()
+    }
+
+    fn saved_machine(id: &str, label: &str, session: &str, enabled: bool) -> SavedMachine {
+        SavedMachine {
+            id: id.into(),
+            label: label.into(),
+            target: "hjz@172.16.2.2".into(),
+            session: session.into(),
+            enabled,
+        }
+    }
+
+    #[test]
+    fn machine_sync_is_idempotent_and_keeps_same_host_sessions_separate() {
+        let client = Client::new(CatalogRunner::default(), None, None, false);
+        let configured = machines(&["mar-linux"]);
+        client.sync_machines(&configured).unwrap();
+        let first = client.runner.catalog.borrow()[0].clone();
+        assert_eq!(
+            (
+                first.label.as_str(),
+                first.target.as_str(),
+                first.session.as_str(),
+                first.enabled
+            ),
+            ("mar-linux", "hjz@172.16.2.2", "mar-linux", true)
+        );
+        client.sync_machines(&configured).unwrap();
+        assert_eq!(*client.runner.catalog.borrow(), vec![first.clone()]);
+        assert_eq!(client.runner.preparations.get(), 1);
+
+        let client = Client::new(CatalogRunner::default(), None, None, false);
+        let configured = machines(&["mar-linux", "builds"]);
+        client.sync_machines(&configured).unwrap();
+        let both = client.runner.catalog.borrow().clone();
+        assert_eq!(
+            (
+                both[0].label.as_str(),
+                both[0].target.as_str(),
+                both[0].session.as_str(),
+                both[0].enabled
+            ),
+            ("builds", "hjz@172.16.2.2", "builds", true)
+        );
+        assert_eq!(both.len(), 2);
+        assert_ne!(both[0].id, both[1].id);
+        assert_eq!(
+            (
+                both[1].label.as_str(),
+                both[1].target.as_str(),
+                both[1].session.as_str(),
+                both[1].enabled
+            ),
+            ("mar-linux", "hjz@172.16.2.2", "mar-linux", true)
+        );
+        client.sync_machines(&configured).unwrap();
+        assert_eq!(*client.runner.catalog.borrow(), both);
+        assert_eq!(client.runner.preparations.get(), 2);
+    }
+
+    #[test]
+    fn machine_sync_renames_and_enables_without_replacing_profiles() {
+        let client = Client::new(CatalogRunner::default(), None, None, false);
+        let original = saved_machine("existing", "old-label", "mar-linux", false);
+        let unrelated = saved_machine("unrelated", "other", "other", false);
+        *client.runner.catalog.borrow_mut() = vec![original.clone(), unrelated.clone()];
+        client.sync_machines(&machines(&["mar-linux"])).unwrap();
+        assert_eq!(
+            *client.runner.catalog.borrow(),
+            vec![
+                SavedMachine {
+                    label: "mar-linux".into(),
+                    enabled: true,
+                    ..original
+                },
+                unrelated,
+            ]
+        );
+        assert_eq!(client.runner.preparations.get(), 0);
+    }
+
+    #[test]
+    fn machine_conflicts_abort_all_preflight_actions() {
+        for saved in [
+            vec![saved_machine("conflict", "mar-linux", "other", true)],
+            vec![
+                saved_machine("one", "old", "mar-linux", true),
+                saved_machine("two", "another", "mar-linux", false),
+            ],
+        ] {
+            let client = Client::new(CatalogRunner::default(), None, None, false);
+            *client.runner.catalog.borrow_mut() = saved.clone();
+            assert!(
+                client
+                    .sync_machines(&machines(&["aaa", "mar-linux"]))
+                    .is_err()
+            );
+            assert_eq!(*client.runner.catalog.borrow(), saved);
+            assert_eq!(client.runner.preparations.get(), 0);
+        }
+    }
+
+    #[test]
+    fn machine_list_errors_never_mutate_the_catalog() {
+        for failure in [
+            output(1, "[]", "catalog unreadable"),
+            output(0, "not json", ""),
+            output(0, r#"[{"id":"incomplete"}]"#, ""),
+        ] {
+            let client = Client::new(CatalogRunner::default(), None, None, false);
+            let saved = vec![saved_machine("unrelated", "other", "other", false)];
+            *client.runner.catalog.borrow_mut() = saved.clone();
+            *client.runner.list_failure.borrow_mut() = Some(failure);
+            assert!(client.sync_machines(&machines(&["mar-linux"])).is_err());
+            assert_eq!(*client.runner.catalog.borrow(), saved);
+            assert_eq!(client.runner.preparations.get(), 0);
+        }
+    }
+
+    #[test]
+    fn machine_setup_failure_stops_then_resumes_without_duplicates() {
+        let client = Client::new(CatalogRunner::default(), None, None, false);
+        let configured = machines(&["aaa", "builds", "mar-linux"]);
+        *client.runner.fail_label.borrow_mut() = Some("builds".into());
+        assert!(client.sync_machines(&configured).is_err());
+        let first = client.runner.catalog.borrow().clone();
+        assert_eq!(first.len(), 1);
+        assert_eq!(first[0].label, "aaa");
+        assert_eq!(client.runner.preparations.get(), 2);
+        *client.runner.fail_label.borrow_mut() = None;
+        client.sync_machines(&configured).unwrap();
+        assert_eq!(client.runner.catalog.borrow()[0], first[0]);
+        assert_eq!(
+            client
+                .runner
+                .catalog
+                .borrow()
+                .iter()
+                .map(|entry| entry.label.clone())
+                .collect::<Vec<_>>(),
+            ["aaa", "builds", "mar-linux"]
+        );
+        assert_eq!(client.runner.preparations.get(), 4);
+    }
+
+    #[test]
+    fn machine_sync_rejects_routing_even_with_empty_configuration() {
+        for (remote, session) in [(Some("host".into()), None), (None, Some("work".into()))] {
+            let client = Client::new(CatalogRunner::default(), remote, session, false);
+            assert!(client.sync_machines(&HashMap::new()).is_err());
+            assert_eq!(client.runner.reads.get(), 0);
         }
     }
 

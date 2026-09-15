@@ -220,3 +220,13 @@ name = "shell"
 
 [[sessions.testing.windows.panes]]
 command = ""
+
+# Optional Herdr connections alongside Local. Activate with: hmx machines sync
+# Each key labels one remote session; the same host can have several entries.
+# [machines.mar-linux]
+# remote = "hjz@172.16.2.2"
+# session = "mar-linux"
+#
+# [machines.builds]
+# remote = "hjz@172.16.2.2"
+# session = "builds"

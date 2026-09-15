@@ -10,7 +10,7 @@ use anyhow::{Context, Result, bail};
 use clap::Parser;
 use config::{Config, DEFAULT_CONFIG, Session};
 use herdr::{Client, Runner, SystemRunner, Workspace, configured_order, next_workspace};
-use hmx_cli::{Cli, Commands};
+use hmx_cli::{Cli, Commands, MachineCommands};
 use std::collections::HashSet;
 use std::path::PathBuf;
 
@@ -159,6 +159,11 @@ fn validation_warnings(config: &Config) -> Vec<String> {
 }
 
 fn run(cli: Cli) -> Result<()> {
+    if matches!(cli.command, Some(Commands::Machines { .. }))
+        && (cli.remote.is_some() || cli.session.is_some())
+    {
+        bail!("machines sync manages the local machine catalog; omit --remote and --session");
+    }
     let inside = std::env::var_os("HERDR_ENV").is_some();
     if inside && cli.remote.is_some() {
         bail!("Cannot use --remote from inside Herdr; detach before targeting another server");
@@ -176,8 +181,21 @@ fn run(cli: Cli) -> Result<()> {
 fn run_with_client<R: Runner>(cli: Cli, client: &Client<R>, inside: bool) -> Result<()> {
     match cli.command {
         Some(Commands::Init) => init_config(cli.config),
+        Some(Commands::Machines {
+            command: MachineCommands::Sync,
+        }) => {
+            if cli.remote.is_some() || cli.session.is_some() {
+                bail!(
+                    "machines sync manages the local machine catalog; omit --remote and --session"
+                );
+            }
+            let config = load_config(cli.config)?;
+            config.validate_machines()?;
+            client.sync_machines(&config.machines)
+        }
         Some(Commands::Validate) => {
             let config = load_config(cli.config)?;
+            config.validate_machines()?;
             for session in config.sessions.values() {
                 session.validate()?;
             }
@@ -191,6 +209,7 @@ fn run_with_client<R: Runner>(cli: Cli, client: &Client<R>, inside: bool) -> Res
             }
             println!("✓ Shared configuration is valid");
             println!("  Found {} workspace(s)", config.sessions.len());
+            println!("  Found {} machine(s)", config.machines.len());
             Ok(())
         }
         Some(Commands::Completions { shell }) => {
@@ -421,6 +440,86 @@ mod tests {
         let path = std::env::temp_dir().join(format!("hmx-{name}-{}.toml", std::process::id()));
         std::fs::write(&path, contents).unwrap();
         path.to_string_lossy().to_string()
+    }
+
+    struct NoCommands;
+
+    impl Runner for NoCommands {
+        fn output(&self, _: &str, _: &[String]) -> Result<Output> {
+            panic!("unexpected subprocess")
+        }
+        fn status(&self, _: &str, _: &[String]) -> Result<()> {
+            panic!("unexpected subprocess")
+        }
+        fn start_server(&self, _: &str, _: &[String]) -> Result<()> {
+            panic!("unexpected server startup")
+        }
+    }
+
+    #[test]
+    fn machines_sync_rejects_routing_before_config_or_catalog_access() {
+        for flag in ["--remote", "--session"] {
+            for inside in [false, true] {
+                let cli = Cli::try_parse_from([
+                    "hmx",
+                    "--config",
+                    "/definitely/missing.toml",
+                    flag,
+                    "remote",
+                    "machines",
+                    "sync",
+                ])
+                .unwrap();
+                let error =
+                    run_with_client(cli, &Client::new(NoCommands, None, None, false), inside)
+                        .unwrap_err();
+                assert!(error.to_string().contains("local machine catalog"));
+            }
+        }
+    }
+
+    #[test]
+    fn machine_validation_and_empty_sync_never_launch_subprocesses() {
+        let path = test_config(
+            "machine-validation",
+            &format!("{DEFAULT_CONFIG}\n[machines.remote]\nremote = 'host'\nsession = 'default'\n"),
+        );
+        let client = Client::new(NoCommands, None, None, false);
+        run_with_client(cli(&path, Some(Commands::Validate)), &client, true).unwrap();
+        std::fs::write(
+            &path,
+            format!(
+                "{DEFAULT_CONFIG}\n[machines.one]\nremote = 'host'\nsession = 'default'\n\
+             [machines.two]\nremote = 'host'\nsession = 'default'\n"
+            ),
+        )
+        .unwrap();
+        assert!(
+            run_with_client(
+                cli(
+                    &path,
+                    Some(Commands::Machines {
+                        command: MachineCommands::Sync,
+                    })
+                ),
+                &client,
+                true
+            )
+            .is_err()
+        );
+        std::fs::write(&path, DEFAULT_CONFIG).unwrap();
+        run_with_client(
+            cli(
+                &path,
+                Some(Commands::Machines {
+                    command: MachineCommands::Sync,
+                }),
+            ),
+            &client,
+            true,
+        )
+        .unwrap();
+        std::fs::remove_file(path).unwrap();
     }
 
     #[test]

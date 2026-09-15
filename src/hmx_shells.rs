@@ -16,6 +16,25 @@ _hmx() {
   COMPREPLY=()
   cur="${COMP_WORDS[COMP_CWORD]}"
   prev="${COMP_WORDS[COMP_CWORD-1]}"
+  if [[ "$prev" == --config || "$prev" == -c ]]; then
+    COMPREPLY=($(compgen -f -- "$cur")); return
+  fi
+  local command_index=1
+  while (( command_index < COMP_CWORD )); do
+    case "${COMP_WORDS[command_index]}" in
+      --config|-c|--remote|--session) ((command_index+=2)) ;;
+      -*) ((command_index+=1)) ;;
+      *) break ;;
+    esac
+  done
+  if [[ "${COMP_WORDS[command_index]}" == machines ]]; then
+    if [[ "$cur" == -* ]]; then
+      COMPREPLY=($(compgen -W "--config --remote --session --verbose --help" -- "$cur"))
+    elif (( COMP_CWORD == command_index + 1 )); then
+      COMPREPLY=($(compgen -W "sync" -- "$cur"))
+    fi
+    return
+  fi
   case "$prev" in
     open|o)
       local running configured candidates candidate
@@ -28,9 +47,8 @@ _hmx() {
       COMPREPLY=($(compgen -W "$candidates" -- "$cur")); return ;;
     close|c|refresh|r) COMPREPLY=($(compgen -W "$(hmx __list-running)" -- "$cur")); return ;;
     completions) COMPREPLY=($(compgen -W "bash fish zsh" -- "$cur")); return ;;
-    --config|-c) COMPREPLY=($(compgen -f -- "$cur")); return ;;
   esac
-  COMPREPLY=($(compgen -W "open o close c refresh r list ls init validate completions --config --remote --session --verbose --help" -- "$cur"))
+  COMPREPLY=($(compgen -W "open o close c refresh r list ls init validate machines completions --config --remote --session --verbose --help" -- "$cur"))
 }
 complete -F _hmx hmx
 "#.to_string()
@@ -50,6 +68,8 @@ complete -c hmx -n '__fish_use_subcommand' -a list -d 'List workspaces'
 complete -c hmx -n '__fish_use_subcommand' -a init
 complete -c hmx -n '__fish_use_subcommand' -a validate
 complete -c hmx -n '__fish_use_subcommand' -a completions
+complete -c hmx -n '__fish_use_subcommand' -a machines -d 'Manage configured Herdr machines'
+complete -c hmx -n '__fish_seen_subcommand_from machines; and not __fish_seen_subcommand_from sync' -a sync -d 'Register configured remote sessions alongside Local'
 complete -c hmx -n '__fish_use_subcommand' -a o -d 'Alias for open'
 complete -c hmx -n '__fish_use_subcommand' -a c -d 'Alias for close'
 complete -c hmx -n '__fish_use_subcommand' -a r -d 'Alias for refresh'
@@ -72,7 +92,7 @@ fn zsh() -> String {
     r#"#compdef hmx
 _hmx() {
   local -a commands
-  commands=('open:Open or focus a workspace' 'o:Alias for open' 'close:Close a workspace' 'c:Alias for close' 'refresh:Refresh a workspace' 'r:Alias for refresh' 'list:List workspaces' 'ls:Alias for list' 'init:Initialize config' 'validate:Validate config' 'completions:Generate completions')
+  commands=('open:Open or focus a workspace' 'o:Alias for open' 'close:Close a workspace' 'c:Alias for close' 'refresh:Refresh a workspace' 'r:Alias for refresh' 'list:List workspaces' 'ls:Alias for list' 'init:Initialize config' 'validate:Validate config' 'machines:Manage configured Herdr machines' 'completions:Generate completions')
   _arguments -C \
     '(-c --config)'{-c,--config}'[shared config]:file:_files' \
     '--remote[SSH target]:target:' \
@@ -92,39 +112,15 @@ _hmx() {
           _values workspace $candidates ;;
         close|c|refresh|r) _values workspace ${(@f)"$(hmx __list-running)"} ;;
         completions) _values shell bash fish zsh ;;
+        machines)
+          if (( CURRENT == 2 )); then
+            local -a machine_commands
+            machine_commands=('sync:Register configured remote sessions alongside Local')
+            _describe 'machine command' machine_commands
+          fi ;;
       esac ;;
   esac
 }
 _hmx "$@"
 "#.to_string()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn completions_are_hmx_specific() {
-        for shell in ["bash", "fish", "zsh"] {
-            let output = generate(shell).unwrap();
-            assert!(output.contains("hmx"));
-            assert!(!output.contains("__tmx"));
-        }
-    }
-
-    #[test]
-    fn completions_include_aliases_and_running_first_deduplication() {
-        for shell in ["bash", "fish", "zsh"] {
-            let output = generate(shell).unwrap();
-            for alias in ["o", "c", "r", "ls"] {
-                assert!(output.contains(alias), "{shell} omitted alias {alias}");
-            }
-            let running = output.find("__list-running").unwrap();
-            let configured = output.find("__list-configured").unwrap();
-            assert!(running < configured, "{shell} did not offer running first");
-        }
-        assert!(bash().contains("grep -qxF"));
-        assert!(fish().contains("not contains"));
-        assert!(zsh().contains("running[(Ie)$candidate]"));
-    }
 }

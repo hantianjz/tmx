@@ -153,6 +153,58 @@ hmx completions fish > ~/.config/fish/completions/hmx.fish
 hmx completions zsh > ~/.local/share/zsh/site-functions/_hmx
 ```
 
+### Remote sessions alongside Local
+
+To show remote workspaces in the same sidebar as Local, add saved connections
+to your existing `tmx.toml` (keep at least one `[sessions.*]` entry):
+
+```toml
+[machines.mar-linux]
+remote = "hjz@172.16.2.2"
+session = "mar-linux"
+
+[machines.builds]
+remote = "hjz@172.16.2.2"
+session = "builds"
+```
+
+Each key is a sidebar label for **one remote session**, not a physical server.
+Both `remote` and `session` are required; use `session = "default"` for the
+default remote session. Different sessions on the same host remain separate.
+
+```bash
+hmx validate                # Validate locally; no SSH or remote setup
+hmx machines sync           # Register/reconcile saved Herdr connections
+herdr                       # Open Local with the saved remote connections
+```
+
+Existing local Herdr clients discover saved machines automatically. Sync
+requires a Herdr version supporting `machine list --json`, `add`, `rename`,
+and `enable`. It runs interactively so Herdr can request SSH, installation,
+or incompatible-server replacement approval. **Replacement may stop remote
+panes; review prompts yourself.** See [Herdr's machine documentation](https://herdr.dev/docs/connecting-machines/).
+
+Sync matches exact `(remote, session)` pairs and preserves existing profile
+IDs. It updates labels, enables matching disabled profiles, and adds missing
+connections. Duplicate configured pairs, duplicate saved identities, or a
+label belonging to another endpoint fail before any changes. Resolve saved
+profile conflicts explicitly with `herdr machine rename` or `remove`; sync
+never silently retargets or deletes profiles. If remote setup fails midway,
+earlier successful changes remain and a rerun resumes without duplicating them.
+
+Removing an entry from TOML does **not** remove its saved Herdr profile.
+Workspace commands, startup, and completions never sync implicitly. Machine
+entries do not become local layouts or workspace completion candidates, and
+`tmx` continues to manage only `[sessions.*]`. Sync does not deploy local
+layouts to the remote sessions.
+
+`hmx machines sync` manages the local catalog, so omit `--remote` and
+`--session`; it can run from a local Herdr pane. Existing standalone targeting
+flags still work for workspace commands. Selecting another machine in the UI
+does not retarget an existing pane's inherited Herdr CLI context.
+
+### Workspace layout examples
+
 #### Basic Example
 
 ```toml

@@ -10,6 +10,15 @@ pub struct Config {
     pub sessions: HashMap<String, Session>,
     #[serde(default)]
     pub default: Option<String>,
+    #[serde(default)]
+    pub machines: HashMap<String, Machine>,
+}
+
+/// A saved connection to one remote Herdr session. The map key is its label.
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct Machine {
+    pub remote: String,
+    pub session: String,
 }
 
 /// Startup window specification (by name or index)
@@ -159,6 +168,38 @@ impl Config {
         }
 
         Ok(config)
+    }
+
+    /// Validate saved Herdr connections without contacting any remote server.
+    #[allow(dead_code)] // Shared with tmx, which does not manage Herdr machines.
+    pub fn validate_machines(&self) -> Result<()> {
+        let mut labels: Vec<_> = self.machines.keys().collect();
+        labels.sort_unstable();
+        let mut identities = HashMap::new();
+        for label in labels {
+            let machine = &self.machines[label];
+            for (field, value) in [
+                ("label", label.as_str()),
+                ("remote", machine.remote.as_str()),
+                ("session", machine.session.as_str()),
+            ] {
+                if value.is_empty() || value.trim() != value || value.chars().any(char::is_control)
+                {
+                    anyhow::bail!(
+                        "machines.{label}: invalid {field}; must be nonempty without surrounding whitespace or control characters"
+                    );
+                }
+            }
+            if machine.remote.starts_with('-') {
+                anyhow::bail!("machines.{label}: invalid remote; must not start with '-'");
+            }
+            if let Some(previous) = identities.insert((&machine.remote, &machine.session), label) {
+                anyhow::bail!(
+                    "machines.{label}: duplicate remote/session connection also configured as machines.{previous}"
+                );
+            }
+        }
+        Ok(())
     }
 
     /// Get the default config file path (~/.config/tmx/tmx.toml)
@@ -428,11 +469,70 @@ size = "50%"                    # Takes 50% of space
 [[sessions.work.windows.panes]]
 command = "echo 'Database'"
 root = "~/work/database"        # Per-pane working directory
+
+# Optional Herdr connection alongside Local. Activate with: hmx machines sync
+# Each key labels one remote session; use another entry for another session.
+# [machines.mar-linux]
+# remote = "hjz@172.16.2.2"
+# session = "mar-linux"
 "#;
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn machine_connections_are_distinct_from_workspace_ids() {
+        let mut config: Config = toml::from_str(DEFAULT_CONFIG).unwrap();
+        let original_ids = config.session_ids();
+        config.machines.insert(
+            "mar-linux".into(),
+            Machine {
+                remote: "hjz@172.16.2.2".into(),
+                session: "mar-linux".into(),
+            },
+        );
+        config.machines.insert(
+            "builds".into(),
+            Machine {
+                remote: "hjz@172.16.2.2".into(),
+                session: "builds".into(),
+            },
+        );
+        let config: Config = toml::from_str(&toml::to_string(&config).unwrap()).unwrap();
+        config.validate_machines().unwrap();
+        assert_eq!(config.session_ids(), original_ids);
+        let mut duplicate = config;
+        duplicate.machines.get_mut("builds").unwrap().session = "mar-linux".into();
+        let error = duplicate.validate_machines().unwrap_err().to_string();
+        assert!(error.contains("machines.builds") && error.contains("machines.mar-linux"));
+    }
+
+    #[test]
+    fn unsafe_machine_values_are_rejected() {
+        for (label, remote, session) in [
+            ("", "host", "default"),
+            ("label ", "host", "default"),
+            ("label", " ", "default"),
+            ("label", "-option", "default"),
+            ("label", "host", "default\n"),
+            ("label", "ho\u{7}st", "default"),
+            ("label", "host", ""),
+        ] {
+            let mut config: Config = toml::from_str(DEFAULT_CONFIG).unwrap();
+            config.machines.insert(
+                label.into(),
+                Machine {
+                    remote: remote.into(),
+                    session: session.into(),
+                },
+            );
+            assert!(
+                config.validate_machines().is_err(),
+                "{label:?} {remote:?} {session:?}"
+            );
+        }
+    }
 
     #[test]
     fn test_parse_default_config() {
