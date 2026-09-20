@@ -733,12 +733,12 @@ pub fn layout_plan(window: &Window) -> Vec<Split> {
         let (target_index, direction, default_ratio) = match layout {
             "even-horizontal" => (index - 1, "right", Some(1.0 / (count - index + 1) as f64)),
             "even-vertical" => (index - 1, "down", Some(1.0 / (count - index + 1) as f64)),
-            "main-vertical" => (if index == 1 { 0 } else { index - 1 }, if index == 1 { "right" } else { "down" }, Some(if index == 1 { 0.33 } else { 1.0 / (count - index + 1) as f64 })),
-            "main-horizontal" => (if index == 1 { 0 } else { index - 1 }, if index == 1 { "down" } else { "right" }, Some(if index == 1 { 0.33 } else { 1.0 / (count - index + 1) as f64 })),
+            "main-vertical" => (if index == 1 { 0 } else { index - 1 }, if index == 1 { "right" } else { "down" }, Some(if index == 1 { 0.67 } else { 1.0 / (count - index + 1) as f64 })),
+            "main-horizontal" => (if index == 1 { 0 } else { index - 1 }, if index == 1 { "down" } else { "right" }, Some(if index == 1 { 0.67 } else { 1.0 / (count - index + 1) as f64 })),
             _ => ((index - 1) / 2, if index % 2 == 1 { "right" } else { "down" }, Some(0.5)),
         };
         let explicit_direction = pane.split.as_deref().map(|split| if split == "horizontal" { "right" } else { "down" });
-        let ratio = pane.size.as_deref().and_then(percent_ratio).or(default_ratio);
+        let ratio = pane.size.as_deref().and_then(configured_pane_size_to_split_ratio).or(default_ratio);
         if pane.size.as_deref().is_some_and(|size| !size.ends_with('%')) {
             eprintln!("Warning: ignoring absolute pane size '{}' for Herdr; only ratios are representable", pane.size.as_deref().unwrap());
         }
@@ -746,11 +746,9 @@ pub fn layout_plan(window: &Window) -> Vec<Split> {
     }).collect()
 }
 
-fn percent_ratio(size: &str) -> Option<f64> {
-    size.strip_suffix('%')?
-        .parse::<f64>()
-        .ok()
-        .map(|value| value / 100.0)
+fn configured_pane_size_to_split_ratio(size: &str) -> Option<f64> {
+    let new_pane_ratio = size.strip_suffix('%')?.parse::<f64>().ok()? / 100.0;
+    Some(1.0 - new_pane_ratio)
 }
 
 fn add_env(args: &mut Vec<String>, env: &HashMap<String, String>) {
@@ -1327,10 +1325,18 @@ mod tests {
             ["right", "down", "right"]
         );
         assert_eq!(layout_plan(&window(None, 3)).len(), 2);
+        assert_eq!(
+            layout_plan(&window(Some("main-vertical"), 2))[0].ratio,
+            Some(0.67)
+        );
+        assert_eq!(
+            layout_plan(&window(Some("main-horizontal"), 2))[0].ratio,
+            Some(0.67)
+        );
     }
 
     #[test]
-    fn explicit_split_and_percentage_override_layout() {
+    fn explicit_split_and_percentage_size_target_new_pane() {
         let mut value = window(Some("even-vertical"), 2);
         value.panes[1].split = Some("horizontal".into());
         value.panes[1].size = Some("30%".into());
@@ -1339,7 +1345,7 @@ mod tests {
             vec![Split {
                 target_index: 0,
                 direction: "right",
-                ratio: Some(0.3)
+                ratio: Some(0.7)
             }]
         );
     }
@@ -1467,7 +1473,7 @@ windows = [
         let session: Session = toml::from_str(
             r#"name = "dev"
 root = "/tmp"
-windows = [{ name = "editor", panes = [{}, {}] }]"#,
+windows = [{ name = "editor", panes = [{}, { size = "30%" }] }]"#,
         )
         .unwrap();
         Client::new(runner, None, None, false)
@@ -1482,5 +1488,11 @@ windows = [{ name = "editor", panes = [{}, {}] }]"#,
         let calls = calls.lock().unwrap();
         assert_eq!(calls.len(), 3);
         assert_eq!(calls[2].1[0..3], ["pane", "split", "p1"]);
+        assert!(
+            calls[2]
+                .1
+                .windows(2)
+                .any(|arg| arg == ["--ratio", "0.700000"])
+        );
     }
 }
