@@ -370,27 +370,27 @@ cargo run -- start dev
 
 ### Releasing
 
-Releases are managed with [GoReleaser](https://goreleaser.com/). To create a new release:
+Pushing a `v*` tag triggers the release workflow in GitHub Actions:
 
 ```bash
 # Tag the release
 git tag -a v0.1.0 -m "Release v0.1.0"
 git push origin v0.1.0
-
-# Run GoReleaser (requires GITHUB_TOKEN with repo access)
-export GITHUB_TOKEN="your-token"
-goreleaser release --clean
 ```
 
 GoReleaser will:
-1. Build binaries for Linux and macOS (x86_64 and arm64)
+1. Build `tmx` and `hmx` for Linux and macOS (x86_64 and arm64)
 2. Create a GitHub release with the binaries
-3. Update the Homebrew formula in [homebrew-tap](https://github.com/hantianjz/homebrew-tap)
+3. Update the Homebrew cask in [homebrew-tap](https://github.com/hantianjz/homebrew-tap)
+
+The workflow requires the `HOMEBREW_TAP_TOKEN` repository secret with Contents
+read/write access to `hantianjz/homebrew-tap`. GitHub provides `GITHUB_TOKEN`
+for publishing the release in this repository.
 
 For local testing without publishing:
 
 ```bash
-goreleaser release --snapshot --clean
+goreleaser release --snapshot --clean --parallelism 1
 ```
 
 ## License
