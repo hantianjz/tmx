@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   release:
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -18,7 +18,7 @@ jobs:
           fetch-depth: 0
 
       - name: Install Zig
-        run: brew install zig
+        uses: mlugg/setup-zig@v2
 
       - name: Release
         uses: goreleaser/goreleaser-action@v7

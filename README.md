@@ -370,7 +370,7 @@ cargo run -- start dev
 
 ### Releasing
 
-Pushing a `v*` tag triggers the release workflow in GitHub Actions:
+Pushing a `v*` tag triggers the release workflow on `ubuntu-latest` in GitHub Actions:
 
 ```bash
 # Tag the release
